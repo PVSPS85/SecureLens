@@ -1,3 +1,47 @@
+/**
+ * ============================================================================
+ * SECUREAI ENDPOINT INTEGRATION REFERENCE GUIDE
+ * ============================================================================
+ * 
+ * 1. GET AI Summary Endpoint:
+ *    - Route: GET /api/v1/secure-ai/summary/:scanId
+ *    - Params: scanId (string, UUID v4 format matches UUID_REGEX)
+ *    - Response (200 OK):
+ *      {
+ *        "success": true,
+ *        "cached": true | false,   // true if fetched from Memory/DB, false if fresh AI run
+ *        "summary": "### SecureAI Threat Investigation Report..."  // Markdown formatted string
+ *      }
+ *    - Error Response (404/500):
+ *      {
+ *        "success": false,
+ *        "status": 404 | 500,
+ *        "error": "Not Found" | "Internal Server Error",
+ *        "message": "Informative error string details..."
+ *      }
+ * 
+ * 2. POST AI Chat Endpoint:
+ *    - Route: POST /api/v1/secure-ai/chat
+ *    - Body Schema:
+ *      {
+ *        "scanId": "bc567081-597a-4a9c-a360-c33069ed35d6",  // String, UUID v4
+ *        "message": "Why did this scan get a Low rating?"    // String, non-empty
+ *      }
+ *    - Response (200 OK):
+ *      {
+ *        "success": true,
+ *        "response": "Based on the scan findings..."  // Chat response string
+ *      }
+ *    - Error Response (400/404/500):
+ *      {
+ *        "success": false,
+ *        "status": 400 | 404 | 500,
+ *        "error": "Bad Request" | "Not Found" | "Internal Server Error",
+ *        "message": "Informative error details..."
+ *      }
+ * ============================================================================
+ */
+
 import { getScanById } from '../db/queries/scans.queries.js';
 import { getReportByScanId, updateReportSummary } from '../db/queries/reports.queries.js';
 import { generateInvestigationSummary, handleChatQuery } from '../services/secureAi.service.js';

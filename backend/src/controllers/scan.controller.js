@@ -92,15 +92,18 @@ export const startScan = async (req, res, next) => {
     await updateScanStatus(scanId, 'completed', riskScore, riskLevel);
 
     // 8. Return response containing the fully compiled risk report
+    // INTEGRATION NOTE: Returns BOTH legacy flat variables and the nested 'scan'
+    // object expected by instructional guides and frontend schemas.
     res.status(201).json({
       success: true,
       data: {
         scanId,
+        // Nested scan object structure specifically for documentation compatibility
         scan: {
           id: scanId,
           target: normalized.normalizedUrl,
           risk_score: riskScore,
-          risk_level: riskLevel.toLowerCase()
+          risk_level: riskLevel.toLowerCase() // Lowercase verdict match (e.g. 'low')
         },
         target: normalized.normalizedUrl,
         type,
