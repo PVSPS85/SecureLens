@@ -6,7 +6,12 @@ import logger from './utils/logger.js';
 import apiRouter from './routes/index.js';
 import { notFoundHandler, errorHandler } from './middlewares/error.middleware.js';
 
+import { globalLimiter } from './middlewares/rateLimiter.middleware.js';
+
 const app = express();
+
+// Trust reverse proxies to resolve client IP addresses correctly
+app.set('trust proxy', 1);
 
 // 1. Security Headers via Helmet
 app.use(helmet());
@@ -17,7 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // 3. CORS configuration with explicit boundaries
 const allowedOrigins = config.corsOrigin
-  ? config.corsOrigin.split(',').map(o => o.trim())
+  ? config.corsOrigin.split(',').map((o) => o.trim())
   : [];
 
 const corsOptions = {
@@ -27,7 +32,10 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    const isProduction = config.env === 'production';
+    const isAllowed = allowedOrigins.includes(origin) || (!isProduction && allowedOrigins.includes('*'));
+
+    if (isAllowed) {
       callback(null, true);
     } else {
       logger.warn(`Blocked request from unauthorized origin: ${origin}`);
@@ -40,6 +48,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// 4. Rate Limiting protection at the global entrance
+app.use(globalLimiter);
 
 // 4. Request Logging Middleware
 app.use((req, res, next) => {
