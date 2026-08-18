@@ -129,10 +129,113 @@ export const getHistory = async (filters = {}, page = 1, limit = 10) => {
   };
 };
 
+const mockLookalikeAlerts = [
+  {
+    id: 'a1a1a1a1-a1a1-4a1a-a1a1-a1a1a1a1a1a1',
+    domain: 'g00gle.com',
+    brand: 'Google',
+    similarityScore: 0.92,
+    status: 'active',
+    riskLevel: 'CRITICAL',
+    detectedAt: '2026-08-18T05:00:00Z',
+    evidence: {
+      type: 'typosquatting',
+      algorithm: 'Levenshtein Distance',
+      distance: 1,
+      mxRecords: ['127.0.0.1'],
+      nSName: 'ns1.suspect-dns.org'
+    }
+  },
+  {
+    id: 'b2b2b2b2-b2b2-4b2b-b2b2-b2b2b2b2b2b2',
+    domain: 'paypa1.co.uk',
+    brand: 'PayPal',
+    similarityScore: 0.89,
+    status: 'active',
+    riskLevel: 'HIGH',
+    detectedAt: '2026-08-18T06:15:00Z',
+    evidence: {
+      type: 'homoglyph',
+      algorithm: 'Confusable Mapping',
+      confusables: { '1': 'l' },
+      mxRecords: [],
+      nSName: 'ns1.parked-domains.net'
+    }
+  },
+  {
+    id: 'c3c3c3c3-c3c3-4c3c-83c3-c3c3c3c3c3c3',
+    domain: 'amaz0n-security.support',
+    brand: 'Amazon',
+    similarityScore: 0.78,
+    status: 'resolved',
+    riskLevel: 'MEDIUM',
+    detectedAt: '2026-08-17T11:45:00Z',
+    evidence: {
+      type: 'combosquatting',
+      algorithm: 'Keyword Appending',
+      keywords: ['security', 'support'],
+      mxRecords: ['mail.amaz0n-security.support'],
+      nSName: 'ns1.webhost.com'
+    }
+  }
+];
+
+/**
+ * Retrieves a list of suspicious lookalike domain alerts.
+ *
+ * @param {object} filters - Risk level or status filters.
+ * @param {number} page - Pagination page.
+ * @param {number} limit - Pagination limit.
+ * @returns {Promise<object>} paginated alerts response.
+ */
+export const getLookalikeAlerts = async (filters = {}, page = 1, limit = 10) => {
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  logger.info(`[Provisional DB] getLookalikeAlerts - Filters: ${JSON.stringify(filters)} | Page: ${page} | Limit: ${limit}`);
+
+  let records = [...mockLookalikeAlerts];
+
+  if (filters.risk) {
+    const targetRisk = filters.risk.toUpperCase();
+    records = records.filter((r) => r.riskLevel.toUpperCase() === targetRisk);
+  }
+
+  if (filters.status) {
+    const targetStatus = filters.status.toLowerCase();
+    records = records.filter((r) => r.status.toLowerCase() === targetStatus);
+  }
+
+  const startIndex = (page - 1) * limit;
+  const paginated = records.slice(startIndex, startIndex + limit);
+
+  return {
+    data: paginated,
+    pagination: {
+      total: records.length,
+      page,
+      limit,
+      totalPages: Math.ceil(records.length / limit)
+    }
+  };
+};
+
+/**
+ * Retrieves deep forensic details for a specific lookalike candidate alert.
+ *
+ * @param {string} id - The alert unique identifier.
+ * @returns {Promise<object|null>} Detailed lookalike candidate alert or null.
+ */
+export const getLookalikeAlertById = async (id) => {
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  logger.info(`[Provisional DB] getLookalikeAlertById - Querying ID: ${id}`);
+  return mockLookalikeAlerts.find((r) => r.id === id) || null;
+};
+
 export default {
   saveScanRecord,
   saveEvidence,
   saveReport,
   getQuickResult,
-  getHistory
+  getHistory,
+  getLookalikeAlerts,
+  getLookalikeAlertById
 };

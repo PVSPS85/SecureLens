@@ -2,6 +2,7 @@ import { Router } from 'express';
 import healthRouter from './health.routes.js';
 import scanRouter from './scan.routes.js';
 import historyRouter from './history.routes.js';
+import lookalikeRouter from './lookalike.routes.js';
 
 const router = Router();
 
@@ -9,5 +10,6 @@ const router = Router();
 router.use('/health', healthRouter);
 router.use('/scan', scanRouter);
 router.use('/history', historyRouter);
+router.use('/lookalikes', lookalikeRouter);
 
 export default router;
