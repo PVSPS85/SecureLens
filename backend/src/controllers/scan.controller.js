@@ -96,6 +96,12 @@ export const startScan = async (req, res, next) => {
       success: true,
       data: {
         scanId,
+        scan: {
+          id: scanId,
+          target: normalized.normalizedUrl,
+          risk_score: riskScore,
+          risk_level: riskLevel.toLowerCase()
+        },
         target: normalized.normalizedUrl,
         type,
         status: 'completed',
