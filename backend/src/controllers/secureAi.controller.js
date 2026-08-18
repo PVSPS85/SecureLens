@@ -22,6 +22,18 @@ export const getAiSummary = async (req, res, next) => {
       });
     }
 
+    // Cache-First check: Query the report first
+    const report = await getReportByScanId(scanId);
+
+    if (report && report.summary && report.summary.trim().length > 0) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        summary: report.summary
+      });
+    }
+
+    // If report doesn't exist or summary is empty, fetch the scan details
     const scan = await getScanById(scanId);
 
     if (!scan) {
@@ -30,17 +42,6 @@ export const getAiSummary = async (req, res, next) => {
         status: 404,
         error: 'Not Found',
         message: 'The requested scan execution could not be found.'
-      });
-    }
-
-    const report = await getReportByScanId(scanId);
-
-    // Cache-First check: If valid cached summary exists, return immediately
-    if (report && report.summary && report.summary.trim().length > 0) {
-      return res.status(200).json({
-        success: true,
-        cached: true,
-        summary: report.summary
       });
     }
 
