@@ -5,6 +5,7 @@ import historyRouter from './history.routes.js';
 import lookalikeRouter from './lookalike.routes.js';
 import scannerRouter from './scanner.routes.js';
 import authRouter from './auth.routes.js';
+import secureAiRouter from './secureAi.routes.js';
 
 const router = Router();
 
@@ -15,5 +16,6 @@ router.use('/history', historyRouter);
 router.use('/lookalikes', lookalikeRouter);
 router.use('/scanners', scannerRouter);
 router.use('/auth', authRouter);
+router.use('/secure-ai', secureAiRouter);
 
 export default router;
