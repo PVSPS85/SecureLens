@@ -1,4 +1,5 @@
-import { getLookalikeAlerts as fetchAlerts, getLookalikeAlertById as fetchAlertById } from '../services/database.interface.js';
+import { getLookalikeAlerts as fetchAlerts } from '../db/queries/lookalike.queries.js';
+import supabase from '../db/client.js';
 
 // Matches standard RFC 4122 UUID v4 formatting syntax
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,7 +34,7 @@ export const getLookalikeAlerts = async (req, res, next) => {
 };
 
 /**
- * Retrieves deep forensic details for a specific lookalike candidate alert.
+ * Retrieves deep forensic details for a specific lookalike candidate alert from Supabase.
  */
 export const getLookalikeAlertById = async (req, res, next) => {
   const { id } = req.params;
@@ -49,7 +50,13 @@ export const getLookalikeAlertById = async (req, res, next) => {
       });
     }
 
-    const alert = await fetchAlertById(id);
+    const { data: alert, error } = await supabase
+      .from('lookalike_alerts')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
 
     if (!alert) {
       return res.status(404).json({

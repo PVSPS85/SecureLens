@@ -1,15 +1,17 @@
-import { scanStorageService } from '../services/scanStorage.service.js';
 import { normalizeTarget } from '../utils/normalizer.js';
 import { isBlockedTarget } from '../utils/ssrfGuard.js';
-import { saveScanRecord, saveEvidence, saveReport, getQuickResult } from '../services/database.interface.js';
 import { analyzeTarget } from '../services/securityEngine.interface.js';
+import { insertScan, updateScanStatus, getScanById } from '../db/queries/scans.queries.js';
+import { insertReport, getReportByScanId } from '../db/queries/reports.queries.js';
+import supabase from '../db/client.js';
+import logger from '../utils/logger.js';
 
-// Matches standard RFC 4122 UUID v4 syntax
+// Matches standard RFC 4122 UUID v4 formatting syntax
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Initiates and orchestrates the full user scan request lifecycle.
- * Combines validation, normalization, state tracking, engine analysis, and database logs.
+ * Writes records to PostgreSQL database using live Supabase queries.
  */
 export const startScan = async (req, res, next) => {
   const { target } = req.body;
@@ -39,66 +41,59 @@ export const startScan = async (req, res, next) => {
 
     const { type, details } = req.validatedTarget; // Extracted from validate middleware
 
-    // 2. Initialize tracking record in memory registry with 'created' state
-    const scanId = scanStorageService.createScan(normalized.normalizedUrl, type, details);
-    scanStorageService.updateScan(scanId, 'created', 0);
-
-    // 3. Initiate Database persistence log placeholder
-    await saveScanRecord({
-      scanId,
-      target: normalized.normalizedUrl,
-      type,
-      details
+    // 2. Initialize tracking record in the Postgres scans table
+    const scanRecord = await insertScan({
+      userId: req.user ? req.user.id : null,
+      target: target,
+      normalizedTarget: normalized.normalizedUrl,
+      targetType: type,
+      source: req.user ? 'web' : 'extension',
+      status: 'queued',
+      riskLevel: 'unknown',
+      riskScore: 0
     });
 
-    // 4. Update status tracking to 'queued' state
-    scanStorageService.updateScan(scanId, 'queued', 10);
-    await new Promise((resolve) => setTimeout(resolve, 100)); // Short mock transition lag
+    const scanId = scanRecord.id;
 
-    // 5. Update status tracking to 'running' state
-    scanStorageService.updateScan(scanId, 'running', 40);
+    // 3. Progress scan status to running
+    await updateScanStatus(scanId, 'running', 0, 'unknown');
 
-    // 6. Invoke Security Engine analysis (simulated facts audit)
+    // 4. Invoke Security Engine analysis (simulated facts audit)
     const engineEvidence = await analyzeTarget({
       target: normalized.normalizedUrl,
       type,
       details
     });
 
-    // 7. Progress status to 80% during final DB sync
-    scanStorageService.updateScan(scanId, 'running', 80);
-
-    // 8. Commit raw evidence & findings report to Database placeholders
-    await saveEvidence(engineEvidence);
-    await saveReport({
-      scanId,
-      vulnerabilitiesCount: engineEvidence.findings.length,
-      findings: engineEvidence.findings
-    });
-
-    // 9. Build sanitized risk metrics mapping to Master Key requirements
+    // 5. Build sanitized risk metrics mapping to Master Key requirements
     const riskScore = engineEvidence.riskScore;
     let riskLevel = 'Low';
     if (riskScore >= 70) riskLevel = 'High';
     else if (riskScore >= 40) riskLevel = 'Medium';
 
-    // Format recommendations array
     const recommendations = engineEvidence.findings.map((f) => f.recommendation);
 
-    const scanResults = {
+    // 6. Commit findings report to Database reports table
+    await insertReport({
+      scanId,
       summary: `Vulnerability audit completed for target ${normalized.normalizedUrl}`,
-      score: riskScore,
-      riskLevel,
-      confidence: engineEvidence.confidence,
-      completeness: engineEvidence.completeness,
       findings: engineEvidence.findings,
-      recommendations
-    };
+      infrastructure: { 
+        analyzedAt: engineEvidence.analyzedAt,
+        engineSignatureVersion: engineEvidence.metadata.engineSignatureVersion
+      },
+      recommendation: recommendations.join('\n'),
+      timeline: [
+        { status: 'queued', timestamp: scanRecord.created_at },
+        { status: 'running', timestamp: new Date().toISOString() }
+      ],
+      rulebookVersion: '1.0.0'
+    });
 
-    // 10. Transition status state to 'completed'
-    scanStorageService.updateScan(scanId, 'completed', 100, scanResults);
+    // 7. Transition status state to completed
+    await updateScanStatus(scanId, 'completed', riskScore, riskLevel);
 
-    // 11. Return response containing the fully compiled risk report
+    // 8. Return response containing the fully compiled risk report
     res.status(201).json({
       success: true,
       data: {
@@ -120,9 +115,9 @@ export const startScan = async (req, res, next) => {
 };
 
 /**
- * Retrieves the current tracking status of a scan.
+ * Retrieves the current tracking status of a scan from PostgreSQL.
  */
-export const getScanStatus = (req, res) => {
+export const getScanStatus = async (req, res, next) => {
   const { scanId } = req.params;
 
   // Enforce validation boundaries on request identifier
@@ -135,33 +130,36 @@ export const getScanStatus = (req, res) => {
     });
   }
 
-  const scan = scanStorageService.getScan(scanId);
+  try {
+    const scan = await getScanById(scanId);
 
-  if (!scan) {
-    return res.status(404).json({
-      success: false,
-      status: 404,
-      error: 'Not Found',
-      message: 'The requested scan execution could not be found.'
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    data: {
-      scanId: scan.id,
-      status: scan.status,
-      progress: scan.progress,
-      createdAt: scan.createdAt,
-      updatedAt: scan.updatedAt
+    if (!scan) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        error: 'Not Found',
+        message: 'The requested scan execution could not be found.'
+      });
     }
-  });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        scanId: scan.id,
+        status: scan.status,
+        createdAt: scan.created_at,
+        updatedAt: scan.updated_at
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 /**
- * Retrieves the authoritative findings report for completed scans.
+ * Retrieves the authoritative findings report for completed scans from PostgreSQL.
  */
-export const getScanReport = (req, res) => {
+export const getScanReport = async (req, res, next) => {
   const { scanId } = req.params;
 
   // Enforce validation boundaries on request identifier
@@ -174,38 +172,50 @@ export const getScanReport = (req, res) => {
     });
   }
 
-  const scan = scanStorageService.getScan(scanId);
+  try {
+    const scan = await getScanById(scanId);
 
-  if (!scan) {
-    return res.status(404).json({
-      success: false,
-      status: 404,
-      error: 'Not Found',
-      message: 'The requested scan execution could not be found.'
-    });
-  }
-
-  // Deny access if scan process is incomplete
-  if (scan.status !== 'completed') {
-    return res.status(400).json({
-      success: false,
-      status: 400,
-      error: 'Bad Request',
-      message: `The scan report is not ready. Current execution state is "${scan.status}".`
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    data: {
-      scanId: scan.id,
-      target: scan.target,
-      type: scan.type,
-      status: scan.status,
-      completedAt: scan.updatedAt,
-      results: scan.results
+    if (!scan) {
+      return res.status(404).json({
+        success: false,
+        status: 404,
+        error: 'Not Found',
+        message: 'The requested scan execution could not be found.'
+      });
     }
-  });
+
+    // Deny access if scan process is incomplete
+    if (scan.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        error: 'Bad Request',
+        message: `The scan report is not ready. Current execution state is "${scan.status}".`
+      });
+    }
+
+    const report = await getReportByScanId(scanId);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        scanId: scan.id,
+        target: scan.target,
+        type: scan.target_type,
+        status: scan.status,
+        completedAt: scan.updated_at,
+        results: report ? {
+          summary: report.summary,
+          score: scan.risk_score,
+          riskLevel: scan.risk_level,
+          findings: report.findings,
+          recommendations: report.recommendation ? report.recommendation.split('\n') : []
+        } : null
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 /**
@@ -215,14 +225,27 @@ export const quickScan = async (req, res, next) => {
   const { target, type } = req.validatedTarget;
 
   try {
-    // 1. Query database cache for existing details
-    const cachedResult = await getQuickResult(target);
+    // 1. Query scans database table directly for existing completed targets
+    logger.info(`[Scan Controller] Querying scans database cache for target: "${target}"`);
+    const { data: existingScans, error } = await supabase
+      .from('scans')
+      .select('*')
+      .eq('target', target)
+      .eq('status', 'completed')
+      .limit(1);
 
-    if (cachedResult) {
+    if (error) throw error;
+
+    if (existingScans && existingScans.length > 0) {
+      const match = existingScans[0];
       return res.status(200).json({
         success: true,
         source: 'cache',
-        data: cachedResult
+        data: {
+          target,
+          riskLevel: match.risk_level,
+          conciseExplanation: `Cached result found. Host resolves to ${match.risk_level} risk level based on prior scan ID ${match.id}.`
+        }
       });
     }
 
