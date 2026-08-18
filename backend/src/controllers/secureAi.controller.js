@@ -1,5 +1,5 @@
 import { getScanById } from '../db/queries/scans.queries.js';
-import { getReportByScanId } from '../db/queries/reports.queries.js';
+import { getReportByScanId, updateReportSummary } from '../db/queries/reports.queries.js';
 import { generateInvestigationSummary, handleChatQuery } from '../services/secureAi.service.js';
 
 // Matches standard RFC 4122 UUID v4 formatting syntax
@@ -35,6 +35,15 @@ export const getAiSummary = async (req, res, next) => {
 
     const report = await getReportByScanId(scanId);
 
+    // Cache-First check: If valid cached summary exists, return immediately
+    if (report && report.summary && report.summary.trim().length > 0) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        summary: report.summary
+      });
+    }
+
     // Compile values into payload formats expected by service
     const evidencePayload = {
       scanId: scan.id,
@@ -53,9 +62,13 @@ export const getAiSummary = async (req, res, next) => {
 
     const aiResult = await generateInvestigationSummary(evidencePayload, riskResult);
 
+    // Save generated summary to database
+    await updateReportSummary(scanId, aiResult.summary);
+
     res.status(200).json({
       success: true,
-      data: aiResult
+      cached: false,
+      summary: aiResult.summary
     });
   } catch (error) {
     // Graceful error fallbacks returning structured informative error payload
@@ -117,7 +130,7 @@ export const postAiChat = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: aiResponse
+      response: aiResponse.response
     });
   } catch (error) {
     // Graceful error fallbacks returning structured informative error payload

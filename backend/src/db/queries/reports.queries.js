@@ -60,7 +60,39 @@ export const getReportByScanId = async (scanId) => {
   }
 };
 
+/**
+ * Updates the summary field of a report by its scan ID.
+ * Uses upsert to handle cases where the report row might not exist yet.
+ *
+ * @param {string} scanId - Target scan identifier.
+ * @param {string} summaryText - Generated AI summary text.
+ * @returns {Promise<object>} Updated or inserted report row.
+ */
+export const updateReportSummary = async (scanId, summaryText) => {
+  try {
+    logger.info(`[Database Reports] Updating summary for scan ID: "${scanId}"`);
+
+    const { data, error } = await supabase
+      .from('reports')
+      .upsert({
+        scan_id: scanId,
+        summary: summaryText
+      }, {
+        onConflict: 'scan_id'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    logger.error(`[Database Reports] Error in updateReportSummary: ${error.message}`);
+    throw new Error(`Database error: Failed to update report summary. Details: ${error.message}`);
+  }
+};
+
 export default {
   insertReport,
-  getReportByScanId
+  getReportByScanId,
+  updateReportSummary
 };

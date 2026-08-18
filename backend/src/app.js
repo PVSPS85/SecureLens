@@ -10,6 +10,17 @@ import { globalLimiter } from './middlewares/rateLimiter.middleware.js';
 
 const app = express();
 
+// Performance Monitor Middleware
+app.use((req, res, next) => {
+  const start = process.hrtime();
+  res.on('finish', () => {
+    const diff = process.hrtime(start);
+    const timeMs = (diff[0] * 1e3 + diff[1] * 1e-6).toFixed(2);
+    console.log(`[PERFORMANCE] ${req.method} ${req.originalUrl} - ${timeMs} ms`);
+  });
+  next();
+});
+
 // Trust reverse proxies to resolve client IP addresses correctly
 app.set('trust proxy', 1);
 
