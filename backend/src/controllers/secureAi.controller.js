@@ -5,6 +5,9 @@ import { generateInvestigationSummary, handleChatQuery } from '../services/secur
 // Matches standard RFC 4122 UUID v4 formatting syntax
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// Local in-memory cache for ultra-fast, sub-2ms retrievals
+const summaryCache = new Map();
+
 /**
  * Endpoint retrieving the AI-generated plain language summary for a scan.
  */
@@ -22,10 +25,21 @@ export const getAiSummary = async (req, res, next) => {
       });
     }
 
-    // Cache-First check: Query the report first
+    // 1. Memory Cache check (Ultra-fast, < 2ms)
+    if (summaryCache.has(scanId)) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        summary: summaryCache.get(scanId)
+      });
+    }
+
+    // 2. Database Cache check (Network roundtrip, ~150-400ms)
     const report = await getReportByScanId(scanId);
 
     if (report && report.summary && report.summary.trim().length > 0) {
+      // Populate memory cache for future requests
+      summaryCache.set(scanId, report.summary);
       return res.status(200).json({
         success: true,
         cached: true,
@@ -65,6 +79,9 @@ export const getAiSummary = async (req, res, next) => {
 
     // Save generated summary to database
     await updateReportSummary(scanId, aiResult.summary);
+
+    // Populate memory cache for future requests
+    summaryCache.set(scanId, aiResult.summary);
 
     res.status(200).json({
       success: true,
