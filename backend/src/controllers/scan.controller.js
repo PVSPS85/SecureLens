@@ -1,6 +1,7 @@
 import { normalizeTarget } from '../utils/normalizer.js';
 import { isBlockedTarget } from '../utils/ssrfGuard.js';
 import { analyzeTarget } from '../services/securityEngine.interface.js';
+import { calculateRiskResult } from '../services/scoringEngine.service.js';
 import { insertScan, updateScanStatus, getScanById } from '../db/queries/scans.queries.js';
 import { insertReport, getReportByScanId } from '../db/queries/reports.queries.js';
 import supabase from '../db/client.js';
@@ -65,29 +66,26 @@ export const startScan = async (req, res, next) => {
       details
     });
 
-    // 5. Build sanitized risk metrics mapping to Master Key requirements
-    const riskScore = engineEvidence.riskScore;
-    let riskLevel = 'Low';
-    if (riskScore >= 70) riskLevel = 'High';
-    else if (riskScore >= 40) riskLevel = 'Medium';
-
-    const recommendations = engineEvidence.findings.map((f) => f.recommendation);
+    // 5. Build authoritative risk metrics using Security Rulebook Scoring Engine
+    const riskResult = calculateRiskResult(engineEvidence);
+    const riskScore = riskResult.score;
+    const riskLevel = riskResult.riskLevel;
 
     // 6. Commit findings report to Database reports table
     await insertReport({
       scanId,
       summary: `Vulnerability audit completed for target ${normalized.normalizedUrl}`,
-      findings: engineEvidence.findings,
+      findings: riskResult.findings,
       infrastructure: { 
         analyzedAt: engineEvidence.analyzedAt,
         engineSignatureVersion: engineEvidence.metadata.engineSignatureVersion
       },
-      recommendation: recommendations.join('\n'),
+      recommendation: riskResult.recommendation,
       timeline: [
         { status: 'queued', timestamp: scanRecord.created_at },
         { status: 'running', timestamp: new Date().toISOString() }
       ],
-      rulebookVersion: '1.0.0'
+      rulebookVersion: riskResult.rulebookVersion
     });
 
     // 7. Transition status state to completed
@@ -103,9 +101,9 @@ export const startScan = async (req, res, next) => {
         status: 'completed',
         riskScore,
         riskLevel,
-        confidence: engineEvidence.confidence,
-        findings: engineEvidence.findings,
-        recommendations
+        confidence: riskResult.confidence,
+        findings: riskResult.findings,
+        recommendations: riskResult.recommendation ? riskResult.recommendation.split('\n') : []
       }
     });
   } catch (error) {
