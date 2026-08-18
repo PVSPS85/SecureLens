@@ -1,0 +1,419 @@
+Continue refining the existing SecureLens application.
+
+IMPORTANT:
+This is Batch 3.
+Do NOT redesign the Investigation Result page again.
+Do NOT rebuild the Dashboard.
+Do NOT modify working components unnecessarily.
+Reuse the existing SecureLens design system and components.
+
+The goal of this batch is to make the remaining CORE pages feel complete and connected.
+
+==================================================
+1. DOMAIN DISCOVERY
+==================================================
+
+Turn the Domain Discovery page into a real cybersecurity intelligence workspace.
+
+Do not make it just a list of domains.
+
+Top section:
+
+"Domain Discovery"
+
+Subtitle:
+"Discover suspicious, newly registered, and potentially impersonating domains."
+
+Add summary metrics:
+
+- Domains discovered
+- High-risk domains
+- Newly registered
+- Brand impersonation candidates
+
+Main discovery table:
+
+Domain
+Risk
+Score
+Domain Age
+First Seen
+Detection Type
+IP / ASN
+Status
+Action
+
+Example detection types:
+
+- Brand impersonation
+- Suspicious keyword
+- Newly registered
+- Look-alike domain
+- Threat intelligence match
+- Suspicious infrastructure
+
+Add:
+
+Search
+Risk filter
+Detection-type filter
+Domain-age filter
+Sort
+
+Every row should have:
+
+"Investigate"
+
+which opens the existing SecureLens investigation workflow.
+
+Use realistic MOCK DATA only.
+
+==================================================
+2. RECENT INVESTIGATIONS
+==================================================
+
+Make the Recent Investigations page a complete investigation history.
+
+This is NOT the compact dashboard widget.
+
+This is the full history page.
+
+Use a professional, dense table.
+
+Columns:
+
+Domain / URL
+Risk
+Score
+Investigation Status
+IP
+Country
+Last Analyzed
+Findings
+Action
+
+Add:
+
+Search
+Risk filter
+Status filter
+Date filter
+Sort
+Pagination
+
+Clicking a row or View should open the existing Investigation Result page.
+
+Keep the dashboard version compact.
+
+==================================================
+3. REPORTS
+==================================================
+
+Create a professional Reports library.
+
+Top:
+
+"Investigation Reports"
+
+Show:
+
+Total Reports
+Critical Reports
+High Risk Reports
+Recent Reports
+
+Main table:
+
+Report
+Domain
+Risk
+Score
+Created
+Last Updated
+Status
+Actions
+
+Actions:
+
+View Report
+Export PDF
+
+Use the existing Investigation Result visual language.
+
+The Report View should reuse investigation evidence instead of inventing a completely different design.
+
+==================================================
+4. BROWSER EXTENSION
+==================================================
+
+SecureLens currently supports CHROME ONLY.
+
+Do not show:
+
+- Firefox
+- Edge
+- Brave
+- Safari
+
+Create a professional Chrome Extension page.
+
+Hero:
+
+"SecureLens for Chrome"
+
+Subtitle:
+
+"Check the website you're currently visiting before you trust it."
+
+Show a realistic Chrome extension popup preview containing:
+
+SecureLens
+Current Domain
+Risk Level
+Risk Score
+Key Signals
+"View Full Investigation"
+
+Then explain:
+
+How it works:
+
+1. Install the lightweight Chrome extension.
+2. Visit a website.
+3. SecureLens provides a quick risk signal.
+4. Open the full SecureLens website for detailed investigation.
+
+IMPORTANT:
+
+The extension itself is intentionally lightweight.
+
+It should NOT perform the complete investigation locally.
+
+The architecture concept is:
+
+Chrome Extension
+↓
+Current URL
+↓
+SecureLens Backend
+↓
+Quick Result
+↓
+View Full Investigation
+↓
+SecureLens Website
+
+Make this distinction visually clear.
+
+Do not claim the extension is already available in the Chrome Web Store.
+
+Use a prototype/demo installation CTA.
+
+==================================================
+5. SETTINGS
+==================================================
+
+Complete the existing Settings pages without overbuilding them.
+
+Create:
+
+Profile
+Appearance
+Notifications
+Security
+Investigation
+SecureAI
+Data & History
+
+PROFILE
+
+Show:
+
+Name
+Email
+Organization
+Role
+Profile picture
+
+Add:
+
+Save Changes
+
+APPEARANCE
+
+Show:
+
+Theme
+Compact tables
+Monospace technical values
+
+NOTIFICATIONS
+
+Include:
+
+Investigation completed
+Critical risk detected
+Report generated
+SecureAI response ready
+
+Use toggles.
+
+SECURITY
+
+Include:
+
+Password
+Active sessions
+Login security
+Two-factor authentication placeholder
+
+INVESTIGATION
+
+Include:
+
+Default investigation behavior
+History retention
+Automatic rescan preferences
+
+SECUREAI
+
+Include:
+
+AI assistant enabled
+Context-aware investigation mode
+Response style
+Confirm before AI analysis
+
+DATA & HISTORY
+
+Include:
+
+Investigation history
+Saved reports
+Clear history
+Export account data
+
+These are UI/prototype controls only.
+
+==================================================
+6. EMPTY STATES
+==================================================
+
+Every page must have a meaningful state.
+
+Do NOT leave:
+
+Title
+Subtitle
+Blank white space
+
+If there is genuinely no data, create a professional empty state.
+
+Example:
+
+"No investigations yet."
+
+"Start your first investigation by entering a URL, domain, or IP address."
+
+[ Start Investigation ]
+
+Use empty states only when appropriate.
+
+For demonstration pages, use realistic mock data so the interface can be explored.
+
+==================================================
+7. CROSS-PAGE NAVIGATION
+==================================================
+
+Ensure the prototype feels connected.
+
+Examples:
+
+Dashboard
+→ View Investigation
+→ Investigation Result
+
+Dashboard
+→ View All Investigations
+→ Recent Investigations
+
+Domain Discovery
+→ Investigate
+→ Investigation Result
+
+Investigation Result
+→ Export Report
+→ Report
+
+Browser Extension
+→ View Full Investigation
+→ Investigation Result
+
+All navigation should feel intentional.
+
+==================================================
+8. DO NOT ADD NEW FEATURES
+==================================================
+
+Do not create:
+
+- Additional scanners
+- Additional browsers
+- Cryptocurrency features
+- Payment systems
+- Admin panels
+- Fake APIs
+- Backend architecture
+- Unrequested AI systems
+
+Only complete the pages already present in the SecureLens product structure.
+
+==================================================
+9. VISUAL CONSISTENCY
+
+Reuse the existing:
+
+- Deep green
+- Warm cream
+- White surfaces
+- Dark text
+- Risk colors
+- Typography
+- Buttons
+- Tables
+- Cards
+- Badges
+- Inputs
+
+Do not create a new visual language.
+
+Keep the interface:
+
+Professional
+Elegant
+Technical
+Trustworthy
+Readable
+Modern
+
+==================================================
+10. FINAL QUALITY CHECK
+
+Before finishing:
+
+Make sure there are no major navigation pages consisting only of a title and empty white space.
+
+Make sure:
+
+- Tables are readable
+- Buttons are aligned
+- Long domains wrap correctly
+- No text overlaps
+- No cards are unnecessarily tall
+- Responsive layouts do not overflow horizontally
+- Navigation is consistent
+- Existing Investigation Result components remain intact
+
+This batch is only about completing the remaining core pages.
+
+Stop after this batch.
