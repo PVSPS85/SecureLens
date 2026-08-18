@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test:smoke": "bash scripts/smoke-test.sh"
   },
   "keywords": [],
   "author": "",
