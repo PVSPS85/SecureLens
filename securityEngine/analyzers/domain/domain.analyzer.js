@@ -1,26 +1,33 @@
-const dns = require('dns').promises;
-const SSRFGuard = require('./ssrf.guard');
+const BaseAnalyzer = require('../../contracts/analyzer.interface');
+const PunycodeUtils = require('./punycode.utils');
 
-class DNSRebindingGuard {
-  /**
-   * Resolves domain and verifies IP safety directly prior to execution.
-   * @param {string} domain 
-   * @returns {Promise<string>} Validated IP address
-   */
-  static async verifyAndResolve(domain) {
-    const addresses = await dns.resolve4(domain);
-    if (!addresses || addresses.length === 0) {
-      throw new Error(`DNS Rebinding Check Failed: No IPv4 records for ${domain}`);
+class DomainAnalyzer extends BaseAnalyzer {
+  constructor() {
+    super('domain');
+  }
+
+  async analyze(context) {
+    try {
+      const host = context.hostname || context.value;
+      const parts = host.split('.');
+
+      const isPuny = PunycodeUtils.isPunycode(host);
+      const decodedDomain = isPuny ? PunycodeUtils.decodeDomain(host) : host;
+
+      const evidence = {
+        hostname: host,
+        decodedHostname: decodedDomain,
+        isPunycode: isPuny,
+        subdomainCount: parts.length > 2 ? parts.length - 2 : 0,
+        tld: parts.length > 1 ? parts[parts.length - 1] : null,
+        domainLength: host.length
+      };
+
+      return this.formatResult(true, evidence);
+    } catch (err) {
+      return this.formatResult(false, {}, err);
     }
-
-    for (const ip of addresses) {
-      if (SSRFGuard.isPrivateIP(ip)) {
-        throw new Error(`DNS Rebinding Blocked: ${domain} resolved to non-public IP ${ip}`);
-      }
-    }
-
-    return addresses[0];
   }
 }
 
-module.exports = DNSRebindingGuard;
+module.exports = DomainAnalyzer;
