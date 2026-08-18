@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureLens</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="extension-window">
+    <!-- Header with dark green background -->
+    <header class="header">
+      <div class="logo-area">
+        <svg class="shield-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <polyline points="9 11 11 13 15 9"/>
+        </svg>
+        <span class="brand-name">SecureLens</span>
+      </div>
+      <span class="proto-badge">for Chrome · prototype</span>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="content">
+      <!-- Target Domain Section -->
+      <section class="website-section">
+        <span class="section-title">CHECKING CURRENT WEBSITE</span>
+        <!-- INTEGRATION POINT: #domain-name (H2 Element)
+             Role 1 (Frontend): Bind active tab domain text here (e.g., suspicious-login-update.net)
+             Role 2 (Backend): Parsed from tab URL query payload -->
+        <h2 id="domain-name" class="domain-display">suspicious-login-update.net</h2>
+      </section>
+
+      <!-- Risk Score & Severity Badge -->
+      <section class="score-section">
+        <div class="score-container">
+          <!-- INTEGRATION POINT: #risk-score (Span Element)
+               Role 1 (Frontend): Bind numeric risk score combined string (e.g., '98/100')
+               Role 2 (Backend): Maps to JSON parameter { score } -->
+          <span id="risk-score" class="score-value score-critical">98/100</span>
+
+          <!-- INTEGRATION POINT: #severity-badge (Span Element)
+               Role 1 (Frontend): Bind text severity ('CRITICAL', 'WARNING', 'SAFE') and toggle dynamic CSS status badge classes
+               Role 2 (Backend): Maps to JSON parameter { severity } -->
+          <span id="severity-badge" class="severity-badge badge-critical">CRITICAL</span>
+        </div>
+
+        <!-- INTEGRATION POINT: #score-desc (Paragraph Element)
+             Role 1 (Frontend): Bind dynamic text threat assessment description
+             Role 2 (Backend): Maps to JSON parameter { description } -->
+        <p id="score-desc" class="score-description">
+          Strong indicators of credential harvesting and brand impersonation.
+        </p>
+      </section>
+
+      <!-- Key Signals Section -->
+      <section class="signals-section">
+        <span class="section-title">KEY SIGNALS</span>
+        
+        <!-- INTEGRATION POINT: #signals-list (UL Container)
+             Role 1 (Frontend): Empty container filled dynamically with list item tags (<li class="signal-item">)
+             Role 2 (Backend): Maps to JSON array { signals: [...] } containing threat strings -->
+        <ul id="signals-list" class="signals-list">
+          <li class="signal-item">
+            <span class="status-dot"></span>
+            <span class="signal-text">Phishing form detected</span>
+          </li>
+          <li class="signal-item">
+            <span class="status-dot"></span>
+            <span class="signal-text">Brand impersonation (94%)</span>
+          </li>
+          <li class="signal-item">
+            <span class="status-dot"></span>
+            <span class="signal-text">Suspicious domain age</span>
+          </li>
+          <li class="signal-item">
+            <span class="status-dot"></span>
+            <span class="signal-text">Threat intelligence match</span>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <!-- Action Section -->
+    <footer class="footer">
+      <!-- INTEGRATION POINT: #view-scan-btn (Button Element)
+           Role 1 (Frontend): Trigger redirection logic. Opens full-scan report URL in a new tab
+           Role 2 (Backend): Combines report route with parameter { scanId } -->
+      <button id="view-scan-btn" class="btn btn-primary">
+        <span>View Full Scan →</span>
+      </button>
+      <span class="footer-subtext">Opens SecureLens for the complete scan report</span>
+    </footer>
+  </div>
+  <script src="src/popup.js"></script>
+</body>
+</html>
