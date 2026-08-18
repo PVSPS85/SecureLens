@@ -20,7 +20,7 @@ export const getScanHistory = async (req, res, next) => {
       filters.risk = risk;
     }
 
-    const result = await getHistory(filters, page, limit);
+    const result = await getHistory(filters, page, limit, req.user.id);
 
     res.status(200).json({
       success: true,

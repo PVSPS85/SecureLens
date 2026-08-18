@@ -102,11 +102,25 @@ export const getQuickResult = async (target) => {
  * @param {object} filters - Key-value search filters (e.g. risk level).
  * @param {number} page - Pagination page.
  * @param {number} limit - Pagination limit.
+ * @param {string} [userId] - Authorized user identifier for Row-Level Security.
  * @returns {Promise<object>} paginated scan records block.
  */
-export const getHistory = async (filters = {}, page = 1, limit = 10) => {
+export const getHistory = async (filters = {}, page = 1, limit = 10, userId = null) => {
   await new Promise((resolve) => setTimeout(resolve, 120));
-  logger.info(`[Provisional DB] getHistory - Filters: ${JSON.stringify(filters)} | Page: ${page} | Limit: ${limit}`);
+  logger.info(`[Provisional DB] getHistory - Filters: ${JSON.stringify(filters)} | Page: ${page} | Limit: ${limit} | User ID: ${userId}`);
+
+  // Enforce Row-Level Security simulation. Only return records if user is authorized.
+  if (!userId || userId !== 'user-uuid-1111-2222-3333-mock') {
+    return {
+      data: [],
+      pagination: {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0
+      }
+    };
+  }
 
   let records = [...mockHistoryRecords];
 
