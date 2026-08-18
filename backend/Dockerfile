@@ -1,5 +1,5 @@
 # Stage 1: Build dependencies
-FROM node:22-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Stage 2: Productive runtime image
-FROM node:22-alpine AS runner
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
@@ -25,11 +25,14 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 
+# Ensure app files are owned by the node user
+RUN chown -R node:node /app
+
 # Run as non-root user
 USER node
 
 # Expose port (Matches standard environment default or PORT configurations)
-EXPOSE 5000
+EXPOSE 5001
 
 # Server execution entrypoint
-CMD ["npm", "start"]
+CMD ["node", "src/index.js"]

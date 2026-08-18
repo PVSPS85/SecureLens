@@ -13,12 +13,19 @@ yarn-error.log*
 .git/
 .gitignore
 
-# IDEs
+# IDEs and OS files
 .DS_Store
 .vscode/
 .idea/
+.npm/
 
 # Local workspace artifacts
 Dockerfile
 .dockerignore
 README.md
+
+# Tests and coverage
+tests/
+coverage/
+*.test.js
+*.spec.js
