@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 // Since this file resides in src/config, we go up two directories to look for .env in the backend root
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const requiredEnvVars = ['PORT', 'NODE_ENV', 'CORS_ORIGIN', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
+const requiredEnvVars = ['PORT', 'NODE_ENV', 'CORS_ORIGIN', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GEMINI_API_KEY'];
 const missingVars = [];
 
 // Check for missing variables
@@ -44,7 +44,8 @@ export const config = {
   env: process.env.NODE_ENV,
   corsOrigin: process.env.CORS_ORIGIN,
   supabaseUrl: process.env.SUPABASE_URL,
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  geminiApiKey: process.env.GEMINI_API_KEY
 };
 
 export default config;
