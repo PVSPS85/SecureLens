@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "SecureLens - Threat Scanner",
+  "version": "1.0.0",
+  "description": "Protects you from phishing websites by scanning active tabs.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SecureLens"
+  }
+}
