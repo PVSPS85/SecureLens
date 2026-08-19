@@ -1,4 +1,5 @@
 import logger from '../utils/logger.js';
+import RulebookEngine from '../../../securityEngine/rulebook/rulebook.engine.js';
 
 /**
  * Authoritative Rulebook Security Scoring Engine.
@@ -9,82 +10,64 @@ import logger from '../utils/logger.js';
  * Calculates risk scores, levels, and failed check boundaries from evidence.
  * Strict, deterministic computation adhering to the SecureLens Security Scoring Rulebook.
  *
- * @param {object} evidencePayload - Gathered evidence records.
+ * @param {object} engineEvidence - The wrapper containing the EvidenceContract under .evidence
  * @returns {object} Formal RiskResult metadata block.
  */
-export const calculateRiskResult = (evidencePayload = {}) => {
+export const calculateRiskResult = (engineEvidence = {}) => {
   logger.info('[Scoring Engine] Resolving threat weights for evidence target.');
 
-  const findings = evidencePayload.findings || [];
-  const warnings = evidencePayload.warnings || [];
-  const confidence = evidencePayload.confidence ?? 1.0;
-  const completeness = evidencePayload.completeness ?? 1.0;
+  // The scan.controller passes { analyzedAt, metadata, evidence: <EvidenceContract> }
+  // We need the inner evidence payload for the rulebook.
+  const evidencePayload = engineEvidence.evidence || engineEvidence;
 
-  let baseScore = 0;
-  const failedChecks = [];
+  // 1. Evaluate risk using the authoritative Paranoia Mode Rulebook Engine
+  const { riskScore, riskLevel, detectedRisks } = RulebookEngine.evaluate(evidencePayload);
 
-  // 1. Evaluate individual vulnerability findings
-  findings.forEach((finding) => {
-    const severity = (finding.severity || 'low').toLowerCase();
-
-    if (severity === 'critical') {
-      baseScore += 40;
-      failedChecks.push(finding);
-    } else if (severity === 'high') {
-      baseScore += 25;
-      failedChecks.push(finding);
-    } else if (severity === 'medium') {
-      baseScore += 15;
-      failedChecks.push(finding);
-    } else if (severity === 'low') {
-      baseScore += 5;
+  // 2. Map rulebook detectedRisks strings into structured frontend findings
+  const findings = detectedRisks.map((riskStr) => {
+    let severity = 'low';
+    if (riskStr.startsWith('INSTANT_100:') || riskStr.startsWith('CRITICAL:')) {
+      severity = 'critical';
+    } else if (riskStr.startsWith('COMPOUND:')) {
+      severity = 'critical'; // Compound phishing indicators are critical
+    } else if (riskStr.startsWith('HIGH:')) {
+      severity = 'high';
+    } else if (riskStr.startsWith('MEDIUM:')) {
+      severity = 'medium';
     }
+
+    // Strip the prefix for the description
+    const description = riskStr.replace(/^(INSTANT_100|CRITICAL|COMPOUND|HIGH|MEDIUM):\s*/i, '').trim();
+    
+    return {
+      id: `rule-${Math.random().toString(36).substring(2, 9)}`,
+      severity,
+      vulnerability: description.split('—')[0].trim() || 'Security Risk Detected',
+      description,
+      recommendation: 'Review rulebook engine documentation for remediation.'
+    };
   });
 
-  // 2. Evaluate custom threat intelligence or lookalike overrides
-  const threatIntel = (evidencePayload.threatIntel || '').toLowerCase();
-  const visualSimilarity = parseFloat(evidencePayload.visualSimilarity) || 0;
-  const hasLoginForm = !!evidencePayload.hasLoginForm;
+  // 3. Set confidence/completeness mock metrics
+  const confidence = 0.95;
+  const completeness = 0.90;
 
-  if (threatIntel === 'confirmed match') {
-    logger.warn('[Scoring Engine] Threat intelligence override: Confirmed malicious target match.');
-    baseScore += 80;
-  }
-
-  if (visualSimilarity >= 90 && hasLoginForm) {
-    logger.warn('[Scoring Engine] Visual similarity override: High brand likeness with input login fields.');
-    baseScore += 70;
-  }
-
-  // 3. Enforce validation boundaries on risk score limits
-  const score = Math.max(0, Math.min(100, Math.round(baseScore)));
-
-  // 4. Map score ranges to paranoia-mode risk bands (matches rulebook.engine.js)
-  //    0–15  → LOW  |  16–40 → MEDIUM  |  41–75 → HIGH  |  76–100 → CRITICAL
-  let riskLevel = 'LOW';
-  if (score >= 76) {
-    riskLevel = 'CRITICAL';
-  } else if (score >= 41) {
-    riskLevel = 'HIGH';
-  } else if (score >= 16) {
-    riskLevel = 'MEDIUM';
-  }
-
-  // 5. Aggregate recommended remediations
-  const recommendations = findings.map((f) => f.recommendation || '').filter(Boolean);
-  const recommendationSummary = recommendations.length > 0
-    ? recommendations.join('\n')
+  // 4. Aggregate recommended remediations
+  const recommendationSummary = findings.length > 0
+    ? 'High-risk threat indicators detected. Please review the detailed findings and consider blocking or taking down the target.'
     : 'No active threat findings detected. Maintain default system security headers and SSL configurations.';
 
-  logger.info(`[Scoring Engine] Evaluation complete. Score: ${score} | Level: ${riskLevel} | Failed Checks: ${failedChecks.length}`);
+  const failedChecks = findings.filter(f => f.severity === 'critical' || f.severity === 'high');
+
+  logger.info(`[Scoring Engine] Evaluation complete. Score: ${riskScore} | Level: ${riskLevel} | Failed Checks: ${failedChecks.length}`);
 
   return {
-    score,
+    score: riskScore,
     riskLevel,
     confidence,
     completeness,
     findings,
-    warnings,
+    warnings: [],
     failedChecks,
     recommendation: recommendationSummary,
     rulebookVersion: '1.0'

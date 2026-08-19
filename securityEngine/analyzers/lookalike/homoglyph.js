@@ -1,6 +1,5 @@
 const HOMOGLYPH_MAP = {
-  'а': 'a', 'с': 'c', 'е': 'e', 'о': 'o', 'р': 'p', 'х': 'x', 'у': 'y', // Cyrillic
-  '0': 'o', '1': 'l', 'l': 'i', 'vv': 'w', 'rn': 'm' // Visual substitutions
+  'а': 'a', 'с': 'c', 'е': 'e', 'о': 'o', 'р': 'p', 'х': 'x', 'у': 'y' // Cyrillic
 };
 
 class HomoglyphDetector {
