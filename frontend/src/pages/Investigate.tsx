@@ -381,7 +381,7 @@ export function Investigate() {
 
                 <div className="rounded-lg border border-border bg-secondary/40 px-4 py-3 mb-4">
                   <p className="text-sm font-medium text-foreground">
-                    {reportData?.results?.summary || "Comprehensive vulnerability and domain integrity assessment completed."}
+                    {aiData?.summary || reportData?.results?.summary || "SecureAI is generating the executive summary..."}
                   </p>
                 </div>
 
@@ -406,15 +406,15 @@ export function Investigate() {
                     <ul className="space-y-1.5">
                       <li className="flex items-start gap-2 text-xs text-foreground">
                         <span className="mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 bg-risk-low" />
-                        IP: {analyzers["ip-asn"]?.data?.ip || analyzers.dns?.data?.records?.a?.[0] || "Resolved"}
+                        IP: {analyzers["ip-asn"]?.data?.ip || analyzers.dns?.data?.records?.a?.[0] || "N/A"}
                       </li>
                       <li className="flex items-start gap-2 text-xs text-foreground">
                         <span className="mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 bg-risk-low" />
-                        TLS: {analyzers.tls?.data?.issuer || "Certificate Active"}
+                        TLS: {analyzers.tls?.data?.issuer || "N/A"}
                       </li>
                       <li className="flex items-start gap-2 text-xs text-foreground">
                         <span className="mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 bg-risk-low" />
-                        Server: {analyzers.http?.data?.server || "Protected"}
+                        Server: {analyzers.http?.data?.server || "N/A"}
                       </li>
                     </ul>
                   </div>

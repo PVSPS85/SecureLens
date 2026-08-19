@@ -121,11 +121,7 @@ export function DNSSection({ data }: { data?: any }) {
   }
 
   // Fallback if no live records returned
-  const finalRows = rows.length > 0 ? rows : [
-    ["A", <span className="font-mono">185.199.108.153</span>, "300"],
-    ["NS", <span className="font-mono">ns1.fast-dns-host.com</span>, "86400"],
-    ["TXT", <span className="font-mono">v=spf1 include:_spf.host ~all</span>, "3600"],
-  ]
+  const finalRows = rows.length > 0 ? rows : []
 
   return (
     <EvidenceSection
@@ -156,9 +152,9 @@ export function DNSSection({ data }: { data?: any }) {
 
 /* -------------------------------- IP / ASN ------------------------------- */
 export function IPSection({ data, ip }: { data?: any; ip?: string }) {
-  const resolvedIp = data?.ip || ip || "185.199.108.153"
-  const version = data?.version ? `IPv${data.version.replace('v', '')}` : "IPv4"
-  const ipType = data?.isPublic ? "Public Route" : data?.isPrivate ? "Private Network" : "Public"
+  const resolvedIp = data?.ip || ip || "Unavailable"
+  const version = data?.version ? `IPv${data.version.replace('v', '')}` : "N/A"
+  const ipType = data?.isPublic ? "Public Route" : data?.isPrivate ? "Private Network" : "Unknown"
 
   return (
     <EvidenceSection
@@ -185,8 +181,8 @@ export function IPSection({ data, ip }: { data?: any; ip?: string }) {
 /* ---------------------------------- TLS ---------------------------------- */
 export function TLSSection({ data }: { data?: any }) {
   const isAuthorized = data?.authorized !== false
-  const validFrom = data?.validFrom ? new Date(data.validFrom).toLocaleDateString() : "Jul 30, 2026"
-  const validTo = data?.validTo ? new Date(data.validTo).toLocaleDateString() : "Oct 28, 2026"
+  const validFrom = data?.validFrom ? new Date(data.validFrom).toLocaleDateString() : "N/A"
+  const validTo = data?.validTo ? new Date(data.validTo).toLocaleDateString() : "N/A"
 
   return (
     <EvidenceSection
@@ -199,13 +195,13 @@ export function TLSSection({ data }: { data?: any }) {
         columns={2}
         items={[
           { label: "HTTPS status", value: isAuthorized ? "Enabled (Valid)" : "Untrusted / Invalid" },
-          { label: "Certificate issuer", value: data?.issuer || "Let's Encrypt / Standard CA" },
-          { label: "Certificate subject", value: data?.subject || "Domain Certificate", mono: true },
+          { label: "Certificate issuer", value: data?.issuer || "N/A" },
+          { label: "Certificate subject", value: data?.subject || "N/A", mono: true },
           { label: "Valid from", value: validFrom },
           { label: "Valid until", value: validTo },
           { label: "Self-Signed", value: data?.isSelfSigned ? "Yes (Warning)" : "No" },
           { label: "Expired", value: data?.isExpired ? "Yes" : "No" },
-          { label: "Certificate Status", value: data?.authorized ? "Trusted Chain" : (data?.authorizationError || "Valid") },
+          { label: "Certificate Status", value: data?.authorized ? "Trusted Chain" : (data?.authorizationError || "Untrusted") },
         ]}
       />
     </EvidenceSection>
@@ -239,9 +235,9 @@ function HeaderRow({
 
 export function HTTPSection({ data }: { data?: any }) {
   const secHeaders = data?.securityHeaders || {}
-  const statusCode = data?.statusCode ? `${data.statusCode} OK` : "200 OK"
-  const server = data?.server || "Protected Server"
-  const contentType = data?.contentType || "text/html; charset=utf-8"
+  const statusCode = data?.statusCode ? `${data.statusCode} OK` : "N/A"
+  const server = data?.server || "Unknown"
+  const contentType = data?.contentType || "Unknown"
 
   return (
     <EvidenceSection
@@ -320,8 +316,8 @@ function RedirectHop({
 }
 
 export function RedirectSection({ data }: { data?: any }) {
-  const totalHops = data?.totalHops !== undefined ? String(data.totalHops) : "3"
-  const finalStatus = data?.chain?.length ? `${data.chain[data.chain.length - 1]?.statusCode || "200"} OK` : "200 OK"
+  const totalHops = data?.totalHops !== undefined ? String(data.totalHops) : "0"
+  const finalStatus = data?.chain?.length ? `${data.chain[data.chain.length - 1]?.statusCode || "N/A"}` : "N/A"
 
   return (
     <EvidenceSection
@@ -346,15 +342,12 @@ export function RedirectSection({ data }: { data?: any }) {
               <RedirectHop
                 key={idx}
                 url={hop.url}
-                status={String(hop.statusCode || "200")}
+                status={String(hop.statusCode || "N/A")}
                 last={idx === data.chain.length - 1}
               />
             ))
           ) : (
-            <>
-              <RedirectHop url="http://example.com" status="301" />
-              <RedirectHop url="https://example.com" status="200 OK" last />
-            </>
+            <p className="text-sm text-muted-foreground">No redirects detected.</p>
           )}
         </div>
       </div>
@@ -429,7 +422,7 @@ export function ThreatSection({ data }: { data?: any }) {
 
 /* ------------------------------- WEBSITE --------------------------------- */
 export function WebsiteSection({ data, browserData }: { data?: any; browserData?: any }) {
-  const pageTitle = browserData?.title || "Analyzed Website"
+  const pageTitle = browserData?.title || "N/A"
   const passwordField = browserData?.hasPasswordField ? "1 (Present)" : "0 (None)"
   const inputCount = browserData?.inputCount !== undefined ? String(browserData.inputCount) : "0"
 
@@ -547,10 +540,10 @@ export function CookiesSection() {
 /* ------------------------------- PHISHING -------------------------------- */
 export function PhishingSection({ data, lookalikeData }: { data?: any; lookalikeData?: any }) {
   const isImpersonating = lookalikeData?.potentialImpersonation
-  const brand = lookalikeData?.matchedBrands?.[0]?.brand || "Protected Brand"
+  const brand = lookalikeData?.matchedBrands?.[0]?.brand || "None Detected"
   const similarity = lookalikeData?.matchedBrands?.[0]?.similarityScore 
     ? `${Math.round(lookalikeData.matchedBrands[0].similarityScore * 100)}%` 
-    : "88%"
+    : "0%"
 
   const indicators = [
     lookalikeData?.containsHomoglyphs ? "Homoglyph / IDN character substitution detected" : "ASCII domain characters validated",
