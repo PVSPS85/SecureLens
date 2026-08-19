@@ -12,6 +12,7 @@ const router = Router();
 // Mount system routes
 router.use('/health', healthRouter);
 router.use('/scan', scanRouter);
+router.use('/scans', scanRouter);
 router.use('/history', historyRouter);
 router.use('/lookalikes', lookalikeRouter);
 router.use('/scanners', scannerRouter);

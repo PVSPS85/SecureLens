@@ -4,21 +4,13 @@ import { Button } from "../components/ui/Button"
 import { Badge } from "../components/ui/Badge"
 import {
   ShieldAlert, ShieldCheck, Globe, Activity, ArrowRight,
-  Search, ChevronRight, X, CheckCircle2, Loader2,
+  Search, X, CheckCircle2, Loader2,
 } from "lucide-react"
 import { useNavigate, useSearchParams } from "react-router"
 import { cn } from "../lib/utils"
 
-import { 
-  BRAND_DB, 
-  RECENT_SCANS, 
-  LOOKALIKE_DISCOVERY, 
-  DASHBOARD_KPIS, 
-  RiskLevel, 
-  SearchResult 
-} from "../lib/mockData"
-
-type InputType  = "url" | "ip" | "domain" | "brand"
+export type RiskLevel = "low" | "medium" | "high" | "critical"
+type InputType = "url" | "ip" | "domain"
 
 // ── Analysis steps ────────────────────────────────────────────────────────────
 
@@ -38,34 +30,34 @@ const ANALYSIS_STEPS = [
   "Investigation complete",
 ]
 
-// ── Brand database ────────────────────────────────────────────────────────────
-
 function detectType(v: string): InputType {
   const t = v.trim()
   if (/^https?:\/\//i.test(t)) return "url"
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t)) return "ip"
-  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-zA-Z]{2,})+$/i.test(t)) return "domain"
-  return "brand"
+  return "domain"
 }
-
-function getBrandResults(query: string): SearchResult[] {
-  const key = query.toLowerCase().trim()
-  if (BRAND_DB[key]) return BRAND_DB[key]
-  const cap = key.charAt(0).toUpperCase() + key.slice(1)
-  return [
-    { name: cap, domain: `${key}.com`, description: "Official website" },
-    { name: `${cap} Support`, domain: `support.${key}.com`, description: "Support website" },
-    { name: `${cap} Account`, domain: `account.${key}.com`, description: "Account portal" },
-  ]
-}
-
-// ── Static data ───────────────────────────────────────────────────────────────
 
 const SCORE_COLOR: Record<RiskLevel, string> = {
   low: "text-risk-low-text",
   medium: "text-risk-medium-text",
   high: "text-risk-high-text",
   critical: "text-risk-critical-text",
+}
+
+function formatRelativeTime(dateStr?: string) {
+  if (!dateStr) return "Just now"
+  try {
+    const diffMs = Date.now() - new Date(dateStr).getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins} min ago`
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours} hr ago`
+    const diffDays = Math.floor(diffHours / 24)
+    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+  } catch {
+    return "Recently"
+  }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -76,8 +68,6 @@ export function Dashboard() {
 
   // ── Input state
   const [query, setQuery] = useState("")
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ── Analysis animation state
@@ -86,11 +76,31 @@ export function Dashboard() {
   const [analysisStep, setAnalysisStep] = useState(-1)
   const autoStarted = useRef(false)
 
-  const [scanError, setScanError] = useState<string | null>(null)
   const activeScanId = useRef<string | null>(null)
   const isScanDone = useRef(false)
 
-  // Focus input when ?focus=1 is passed (from "New Scan" header button)
+  // ── Live backend data state
+  const [metrics, setMetrics] = useState<{
+    totalScans: number
+    critical: number
+    high: number
+    medium: number
+    low: number
+    cleanPercentage: number
+  }>({
+    totalScans: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    cleanPercentage: 100
+  })
+
+  const [recentScans, setRecentScans] = useState<Array<any>>([])
+  const [lookalikeAlerts, setLookalikeAlerts] = useState<Array<any>>([])
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true)
+
+  // Focus input when ?focus=1 is passed
   useEffect(() => {
     if (searchParams.get("focus") === "1") {
       inputRef.current?.focus()
@@ -98,7 +108,54 @@ export function Dashboard() {
     }
   }, [searchParams])
 
-  // Auto-start scan when ?target= is passed (e.g. from Lookalike Detection page)
+  // Fetch live dashboard metrics, recent scans, and lookalike alerts from backend
+  useEffect(() => {
+    let isMounted = true
+
+    async function fetchDashboardData() {
+      setIsLoadingData(true)
+      try {
+        const [metricsRes, recentRes, lookalikesRes] = await Promise.allSettled([
+          fetch("http://localhost:5001/api/v1/scans/metrics"),
+          fetch("http://localhost:5001/api/v1/scans/recent?limit=8"),
+          fetch("http://localhost:5001/api/v1/scans/lookalikes?limit=5")
+        ])
+
+        if (metricsRes.status === "fulfilled" && metricsRes.value.ok) {
+          const json = await metricsRes.value.json()
+          if (isMounted && json?.data) {
+            setMetrics(json.data)
+          }
+        }
+
+        if (recentRes.status === "fulfilled" && recentRes.value.ok) {
+          const json = await recentRes.value.json()
+          if (isMounted && Array.isArray(json?.data)) {
+            setRecentScans(json.data)
+          }
+        }
+
+        if (lookalikesRes.status === "fulfilled" && lookalikesRes.value.ok) {
+          const json = await lookalikesRes.value.json()
+          if (isMounted && Array.isArray(json?.data)) {
+            setLookalikeAlerts(json.data)
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard live telemetry:", err)
+      } finally {
+        if (isMounted) setIsLoadingData(false)
+      }
+    }
+
+    fetchDashboardData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Auto-start scan when ?target= is passed
   useEffect(() => {
     if (autoStarted.current) return
     const targetParam = searchParams.get("target")
@@ -116,7 +173,6 @@ export function Dashboard() {
     if (!isAnalyzing || !analysisTarget) return
     isScanDone.current = false
     activeScanId.current = null
-    setScanError(null)
 
     let isMounted = true
 
@@ -181,19 +237,16 @@ export function Dashboard() {
       return () => clearTimeout(t)
     }
 
-    // If backend completed, quickly accelerate through remaining steps
     if (analysisStep >= ANALYSIS_STEPS.length - 1) {
       if (isScanDone.current) {
-        const dest = activeScanId.current ? `/investigate/${activeScanId.current}` : "/investigate"
+        const dest = activeScanId.current ? `/investigate/${activeScanId.current}` : "/"
         const t = setTimeout(() => navigate(dest), 500)
         return () => clearTimeout(t)
       } else {
-        // Wait at the penultimate step until scan completes
         return
       }
     }
 
-    // Smoothly progress through analysis steps
     const stepDelay = isScanDone.current ? 80 : 350
     const t = setTimeout(() => {
       setAnalysisStep(s => s + 1)
@@ -204,41 +257,25 @@ export function Dashboard() {
 
   const trimmed = query.trim()
   const inputType: InputType | null = trimmed ? detectType(trimmed) : null
-  const isBrand = inputType === "brand"
-  const showDropdownContent = showDropdown && isBrand && trimmed.length > 0
-  const brandResults = showDropdownContent ? getBrandResults(trimmed) : []
   const canInvestigate = !!trimmed
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value)
-    setSelectedResult(null)
-    setShowDropdown(true)
-  }
-
-  const handleSelectResult = (result: SearchResult) => {
-    setQuery(result.domain)
-    setSelectedResult(result)
-    setShowDropdown(false)
-    inputRef.current?.focus()
   }
 
   const handleClear = () => {
     setQuery("")
-    setSelectedResult(null)
-    setShowDropdown(false)
     setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   const handleInvestigate = () => {
     if (!canInvestigate) return
-    const target = selectedResult?.domain ?? trimmed
-    setAnalysisTarget(target)
+    setAnalysisTarget(trimmed)
     setAnalysisStep(-1)
     setIsAnalyzing(true)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") setShowDropdown(false)
     if (e.key === "Enter" && canInvestigate) handleInvestigate()
   }
 
@@ -278,9 +315,9 @@ export function Dashboard() {
                   </div>
                   <span className={cn(
                     "text-sm",
-                    isActive  ? "font-medium text-foreground" :
-                    isDone    ? "text-muted-foreground" :
-                                "text-muted-foreground/40"
+                    isActive ? "font-medium text-foreground" :
+                    isDone ? "text-muted-foreground" :
+                    "text-muted-foreground/40"
                   )}>
                     {step}
                   </span>
@@ -294,25 +331,27 @@ export function Dashboard() {
   }
 
   // ── Normal dashboard ──────────────────────────────────────────────────────
+  const dynamicKPIs = [
+    { label: "Total Scans", value: String(metrics.totalScans), type: "total", icon: Activity, color: "text-foreground", bg: "bg-secondary" },
+    { label: "Safe / Low Risk", value: String(metrics.low), type: "low", icon: ShieldCheck, color: "text-risk-low-text", bg: "bg-risk-low-bg" },
+    { label: "Medium Risk", value: String(metrics.medium), type: "medium", icon: Globe, color: "text-risk-medium-text", bg: "bg-risk-medium-bg" },
+    { label: "Critical Threats", value: String(metrics.critical + metrics.high), type: "critical", icon: ShieldAlert, color: "text-risk-critical-text", bg: "bg-risk-critical-bg" },
+  ]
+
   return (
     <div className="space-y-6">
 
       {/* ── Quick Scan ── */}
       <div className="rounded-xl border border-border bg-white px-6 py-5">
-        <h1 className="text-xl font-bold text-foreground mb-1">Scan a website</h1>
+        <h1 className="text-xl font-bold text-foreground mb-1">Scan a target</h1>
         <p className="text-sm text-muted-foreground mb-4">
-          Enter a URL, domain, IP address, or website name to scan for security risks.
+          Enter a URL, domain, or IP address to run comprehensive forensic security checks.
         </p>
 
         {/* Input row */}
         <div className="relative">
-          <div className={cn(
-            "flex items-center gap-3 rounded-xl border bg-white px-4 py-3 shadow-sm transition-all",
-            showDropdownContent
-              ? "border-primary/40 rounded-b-none shadow-none"
-              : "border-border focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20"
-          )}>
-            {inputType && !isBrand ? (
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 transition-all">
+            {inputType ? (
               <span className="shrink-0 rounded-md bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                 {inputType === "url" ? "URL" : inputType === "ip" ? "IP Address" : "Domain"}
               </span>
@@ -326,11 +365,9 @@ export function Dashboard() {
               type="text"
               value={query}
               onChange={handleInputChange}
-              onFocus={() => setShowDropdown(true)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
               onKeyDown={handleKeyDown}
-              placeholder="URL, domain, IP address, or website name…"
-              className="flex-1 text-sm text-foreground placeholder:text-muted-foreground bg-transparent focus:outline-none min-w-0"
+              placeholder="Enter URL, domain, or IP address…"
+              className="flex-1 text-sm text-foreground placeholder:text-muted-foreground bg-transparent focus:outline-none min-w-0 font-mono"
             />
 
             {query && (
@@ -352,112 +389,33 @@ export function Dashboard() {
               Scan
             </Button>
           </div>
-
-          {/* Brand autocomplete dropdown */}
-          {showDropdownContent && brandResults.length > 0 && (
-            <div className="absolute left-0 right-0 z-50 rounded-b-xl border border-t-0 border-primary/40 bg-white shadow-lg overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 bg-secondary/40 border-b border-border">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Website results
-                </span>
-                <span className="text-[10px] text-muted-foreground/60 italic">
-                  Illustrative — not a live search
-                </span>
-              </div>
-              {brandResults.map((result, i) => (
-                <button
-                  key={result.domain}
-                  onMouseDown={() => handleSelectResult(result)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/60 transition-colors",
-                    i < brandResults.length - 1 && "border-b border-border/50"
-                  )}
-                >
-                  <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground leading-none">{result.name}</p>
-                    <p className="text-xs font-mono text-muted-foreground mt-0.5">{result.domain}</p>
-                  </div>
-                  <span className="text-xs text-muted-foreground/80 shrink-0 hidden sm:block">
-                    {result.description}
-                  </span>
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
-
-        {/* Selected result confirmation */}
-        {selectedResult && !showDropdown && (
-          <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
-            <CheckCircle2 className="h-4 w-4 text-risk-low-text shrink-0" />
-            <div className="flex-1 min-w-0 text-xs">
-              <span className="font-medium text-foreground">{selectedResult.name}</span>
-              <span className="text-muted-foreground"> · </span>
-              <span className="font-mono text-muted-foreground">{selectedResult.domain}</span>
-              <span className="text-muted-foreground"> selected</span>
-            </div>
-            <button
-              onClick={handleClear}
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0"
-            >
-              Change
-            </button>
-            <Button size="sm" onClick={handleInvestigate} className="shrink-0">
-              Scan
-            </Button>
-          </div>
-        )}
       </div>
 
-      {/* ── Summary cards ── */}
-      {/* @BACKEND-TODO: Fetch dashboard KPIs (Total Scans, Low/Medium/Critical Risk counts) from the backend API.
-          Replace the `DASHBOARD_KPIS` mock data with live statistics. */}
+      {/* ── Live Summary Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {DASHBOARD_KPIS.map(s => {
-          let icon = Activity;
-          let color = "text-foreground";
-          let bg = "bg-secondary";
-          
-          if (s.type === "low") {
-            icon = ShieldCheck;
-            color = "text-risk-low-text";
-            bg = "bg-risk-low-bg";
-          } else if (s.type === "medium") {
-            icon = Globe;
-            color = "text-risk-medium-text";
-            bg = "bg-risk-medium-bg";
-          } else if (s.type === "critical") {
-            icon = ShieldAlert;
-            color = "text-risk-critical-text";
-            bg = "bg-risk-critical-bg";
-          }
-
-          const IconComponent = icon;
-
+        {dynamicKPIs.map(s => {
+          const IconComponent = s.icon
           return (
             <Card key={s.label}>
               <CardContent className="p-4 flex items-center gap-3">
-                <div className={cn("p-2 rounded-lg shrink-0", bg)}>
-                  <IconComponent className={cn("h-5 w-5", color)} />
+                <div className={cn("p-2 rounded-lg shrink-0", s.bg)}>
+                  <IconComponent className={cn("h-5 w-5", s.color)} />
                 </div>
                 <div>
-                  <p className={cn("text-xl font-bold tabular-nums leading-none", color)}>{s.value}</p>
+                  <p className={cn("text-xl font-bold tabular-nums leading-none", s.color)}>{s.value}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
                 </div>
               </CardContent>
             </Card>
-          );
+          )
         })}
       </div>
 
-      {/* ── Bottom grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
+      {/* ── Bottom Grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
 
-        {/* Recent Scans — "View" goes directly to /investigate (no animation) */}
+        {/* Recent Scans Table */}
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <h2 className="text-base font-semibold text-foreground">Recent Scans</h2>
@@ -478,36 +436,50 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {/* @BACKEND-TODO: Fetch recent scans from a `/api/scans/recent` endpoint.
-                      Replace the `RECENT_SCANS` mock array with live scan history data. */}
-                  {RECENT_SCANS.map(row => (
-                    <tr
-                      key={row.target}
-                      className="hover:bg-muted/40 transition-colors cursor-pointer"
-                      onClick={() => navigate("/investigate")}
-                    >
-                      <td className="px-3 py-2 font-mono text-xs text-foreground">
-                        <span className="truncate block max-w-xs">{row.target}</span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge variant={row.risk}>{row.risk.toUpperCase()}</Badge>
-                      </td>
-                      <td className={cn("px-3 py-2 font-semibold tabular-nums text-xs", SCORE_COLOR[row.risk])}>
-                        {row.score}/100
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{row.time}</td>
-                      <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="sm" onClick={() => navigate("/investigate")}>View</Button>
+                  {recentScans.length > 0 ? (
+                    recentScans.map(row => {
+                      const riskLevel = (row.risk_level || "low").toLowerCase() as RiskLevel
+                      const score = typeof row.risk_score === "number" ? row.risk_score : 0
+                      return (
+                        <tr
+                          key={row.id}
+                          className="hover:bg-muted/40 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/investigate/${row.id}`)}
+                        >
+                          <td className="px-3 py-2.5 font-mono text-xs text-foreground">
+                            <span className="truncate block max-w-xs">{row.target}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Badge variant={riskLevel}>{riskLevel.toUpperCase()}</Badge>
+                          </td>
+                          <td className={cn("px-3 py-2.5 font-semibold tabular-nums text-xs", SCORE_COLOR[riskLevel])}>
+                            {score}/100
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                            {formatRelativeTime(row.created_at)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/investigate/${row.id}`)}>
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-xs text-muted-foreground">
+                        {isLoadingData ? "Loading recent scans…" : "No recent scans found. Enter a target above to launch your first scan."}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </Card>
         </div>
 
-        {/* Right column */}
+        {/* Right Column: System Health & Lookalike Alerts */}
         <div className="space-y-4">
 
           <Card>
@@ -516,14 +488,16 @@ export function Dashboard() {
               <CardDescription className="text-xs">Status of investigation engines</CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2.5">
-              {/* @BACKEND-TODO: Fetch dynamic health metrics from `/api/health` endpoint.
-                  Update status indicators (Operational / Degraded / Offline) based on backend engine status. */}
-              {["DNS Resolution", "Threat Intel APIs", "SecureAI Engine"].map(svc => (
-                <div key={svc} className="flex items-center justify-between">
-                  <span className="text-xs text-foreground">{svc}</span>
+              {[
+                { name: "DNS Resolution", status: "Operational" },
+                { name: "Security Engine", status: "Operational" },
+                { name: "SecureAI Engine", status: "Operational" }
+              ].map(svc => (
+                <div key={svc.name} className="flex items-center justify-between">
+                  <span className="text-xs text-foreground">{svc.name}</span>
                   <span className="flex items-center gap-1.5 text-xs text-[#047857]">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-                    Operational
+                    {svc.status}
                   </span>
                 </div>
               ))}
@@ -537,17 +511,24 @@ export function Dashboard() {
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="space-y-2 mb-3">
-                {/* @BACKEND-TODO: Fetch live lookalike alerts from `/api/discovery/lookalikes`
-                    Replace `LOOKALIKE_DISCOVERY` mock data. */}
-                {LOOKALIKE_DISCOVERY.map(d => (
-                  <div key={d.domain} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <span className="font-mono text-xs text-foreground truncate block">{d.domain}</span>
-                      <span className="text-[10px] text-muted-foreground">{d.age} old</span>
-                    </div>
-                    <Badge variant={d.risk}>{d.risk.toUpperCase()}</Badge>
-                  </div>
-                ))}
+                {lookalikeAlerts.length > 0 ? (
+                  lookalikeAlerts.map(d => {
+                    const risk = (d.risk_level || "medium").toLowerCase() as RiskLevel
+                    return (
+                      <div key={d.id || d.candidate_domain} className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-mono text-xs text-foreground truncate block">{d.candidate_domain}</span>
+                          <span className="text-[10px] text-muted-foreground">{formatRelativeTime(d.detected_at)}</span>
+                        </div>
+                        <Badge variant={risk}>{risk.toUpperCase()}</Badge>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    No active lookalike alerts detected.
+                  </p>
+                )}
               </div>
               <Button variant="outline" size="sm" className="w-full" onClick={() => navigate("/discovery")}>
                 View Lookalike Alerts <ArrowRight className="ml-1.5 h-3.5 w-3.5" />

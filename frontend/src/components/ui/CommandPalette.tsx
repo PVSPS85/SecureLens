@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from "react"
 import { useNavigate } from "react-router"
 import { Search, Globe, LayoutDashboard, History, FileText, QrCode, Settings, X } from "lucide-react"
-import { RECENT_SCANS } from "../../lib/mockData"
 import { cn } from "../../lib/utils"
 
 interface CommandPaletteProps {
@@ -9,8 +8,17 @@ interface CommandPaletteProps {
   onClose: () => void
 }
 
+interface PaletteItem {
+  type: string
+  name: string
+  href: string
+  icon: React.ElementType
+  subtitle?: string
+}
+
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState("")
+  const [recentScans, setRecentScans] = useState<Array<any>>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
@@ -18,6 +26,16 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     if (isOpen) {
       setQuery("")
       setTimeout(() => inputRef.current?.focus(), 100)
+      
+      // Fetch live recent scans
+      fetch("http://localhost:5001/api/v1/scans/recent?limit=5")
+        .then(res => res.json())
+        .then(json => {
+          if (Array.isArray(json?.data)) {
+            setRecentScans(json.data)
+          }
+        })
+        .catch(() => {})
     }
   }, [isOpen])
 
@@ -34,14 +52,6 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
 
   if (!isOpen) return null
 
-  interface PaletteItem {
-    type: string
-    name: string
-    href: string
-    icon: React.ElementType
-    subtitle?: string
-  }
-
   const items: PaletteItem[] = [
     { type: "page", name: "Dashboard", href: "/", icon: LayoutDashboard },
     { type: "page", name: "Lookalike Detection", href: "/discovery", icon: Globe },
@@ -49,17 +59,17 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     { type: "page", name: "Reports", href: "/reports", icon: FileText },
     { type: "page", name: "QR Scanner", href: "/scanners?type=qr", icon: QrCode },
     { type: "page", name: "Settings", href: "/settings", icon: Settings },
-    ...RECENT_SCANS.map(scan => ({
+    ...recentScans.map(scan => ({
       type: "scan",
       name: scan.target,
-      href: "/investigate",
+      href: `/investigate/${scan.id}`,
       icon: Search,
-      subtitle: `Risk: ${scan.risk.toUpperCase()} · Score: ${scan.score}`
+      subtitle: `Risk: ${(scan.risk_level || "LOW").toUpperCase()} · Score: ${scan.risk_score ?? 0}`
     }))
   ]
 
   const filteredItems = query.trim() === "" 
-    ? items.slice(0, 6) // Show top pages when empty
+    ? items.slice(0, 6)
     : items.filter(item => item.name.toLowerCase().includes(query.toLowerCase()))
 
   const handleSelect = (href: string) => {
@@ -92,7 +102,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 if (filteredItems.length > 0) {
                   handleSelect(filteredItems[0].href)
                 } else if (query.trim()) {
-                  handleSelect("/investigate") // fallback for new scan
+                  handleSelect(`/?target=${encodeURIComponent(query.trim())}`)
                 }
               }
             }}
@@ -144,3 +154,4 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     </div>
   )
 }
+export default CommandPalette

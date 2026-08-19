@@ -380,9 +380,105 @@ export const quickScan = async (req, res, next) => {
   }
 };
 
+/**
+ * Fetches recent scan records directly from Supabase ordered by creation time.
+ */
+export const getRecentScans = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const { data, error } = await supabase
+      .from('scans')
+      .select('id, target, target_type, status, risk_score, risk_level, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Computes live dashboard metrics (total counts and risk breakdowns) from Supabase.
+ */
+export const getDashboardMetrics = async (req, res, next) => {
+  try {
+    const { data: scans, error, count } = await supabase
+      .from('scans')
+      .select('id, risk_level, risk_score, status', { count: 'exact' });
+
+    if (error) throw error;
+
+    const totalScans = count !== null && count !== undefined ? count : (scans ? scans.length : 0);
+    let critical = 0;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+
+    (scans || []).forEach((s) => {
+      const lvl = (s.risk_level || '').toLowerCase();
+      if (lvl === 'critical') critical++;
+      else if (lvl === 'high') high++;
+      else if (lvl === 'medium') medium++;
+      else if (lvl === 'low' || lvl === 'safe') low++;
+      else {
+        if (s.risk_score >= 75) critical++;
+        else if (s.risk_score >= 50) high++;
+        else if (s.risk_score >= 25) medium++;
+        else low++;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalScans,
+        critical,
+        high,
+        medium,
+        low,
+        cleanPercentage: totalScans > 0 ? Math.round((low / totalScans) * 100) : 100
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Fetches lookalike alerts from Supabase.
+ */
+export const getLookalikeAlerts = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const { data: alerts, error } = await supabase
+      .from('lookalike_alerts')
+      .select('*')
+      .order('detected_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data: alerts || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   startScan,
   getScanStatus,
   getScanReport,
-  quickScan
+  quickScan,
+  getRecentScans,
+  getDashboardMetrics,
+  getLookalikeAlerts
 };

@@ -137,14 +137,14 @@ export function Investigate() {
   const [exportState, setExportState] = useState<"idle" | "preparing" | "ready">("idle")
 
   useEffect(() => {
+    if (!activeId) {
+      navigate("/", { replace: true })
+      return
+    }
+
     let isMounted = true
 
     async function loadReport() {
-      if (!activeId) {
-        setIsLoading(false)
-        return
-      }
-
       setIsLoading(true)
       try {
         const res = await fetch(`http://localhost:5001/api/v1/scan/${activeId}/report`)
@@ -164,7 +164,7 @@ export function Investigate() {
           // AI endpoint is optional
         }
       } catch (err) {
-        console.warn("Dynamic report fetch failed, using available data:", err)
+        console.warn("Dynamic report fetch failed:", err)
       } finally {
         if (isMounted) setIsLoading(false)
       }
@@ -174,7 +174,7 @@ export function Investigate() {
     return () => {
       isMounted = false
     }
-  }, [activeId])
+  }, [activeId, navigate])
 
   const handleExport = () => {
     if (exportState === "ready") { navigate("/report"); return }
@@ -193,11 +193,26 @@ export function Investigate() {
     )
   }
 
-  // Resolved dynamic values
-  const domain = reportData?.target || "example.com"
-  const riskScore = typeof reportData?.results?.score === "number" ? reportData.results.score : (reportData ? 15 : 98)
-  const rawRiskLevel = (reportData?.results?.riskLevel || (reportData ? "LOW" : "CRITICAL")).toUpperCase()
-  const displayScanId = reportData?.scanId || activeId || "SL-INV-000142"
+  if (!reportData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4 text-center">
+        <ShieldAlert className="h-10 w-10 text-muted-foreground/40" />
+        <h2 className="text-base font-semibold text-foreground">Scan Report Not Found</h2>
+        <p className="text-xs text-muted-foreground max-w-sm">
+          No telemetry record exists for this scan ID, or the scan is still running.
+        </p>
+        <Button size="sm" onClick={() => navigate("/")}>
+          Return to Dashboard
+        </Button>
+      </div>
+    )
+  }
+
+  // Resolved dynamic values strictly from live report
+  const domain = reportData?.target || "Unknown Target"
+  const riskScore = typeof reportData?.results?.score === "number" ? reportData.results.score : 0
+  const rawRiskLevel = (reportData?.results?.riskLevel || "LOW").toUpperCase()
+  const displayScanId = reportData?.scanId || activeId
   const findings = reportData?.results?.findings || []
   const evidence = reportData?.results?.evidence || {}
   const analyzers = evidence?.analyzers || {}
