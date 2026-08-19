@@ -1,6 +1,7 @@
 import app from './app.js';
 import config from './config/index.js';
 import logger from './utils/logger.js';
+import { startNrdDaemon, stopNrdDaemon } from './services/nrdDaemon.js';
 
 let server;
 
@@ -12,6 +13,9 @@ try {
     logger.info(` Port: ${config.port}                            `);
     logger.info(` Environment: ${config.env}                      `);
     logger.info(`=================================================`);
+    
+    // Initialize Newly Registered Domain monitoring daemon
+    startNrdDaemon();
   });
 } catch (error) {
   logger.error('Failed to start server:', error);
@@ -21,6 +25,7 @@ try {
 // Graceful Shutdown Handler
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
+  stopNrdDaemon();
   if (server) {
     server.close(() => {
       logger.info('HTTP server closed.');

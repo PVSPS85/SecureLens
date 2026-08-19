@@ -71,8 +71,8 @@ export function DomainDiscovery() {
   const [page, setPage]             = useState(1)
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const loadAlerts = useCallback(async () => {
-    setIsLoading(true)
+  const loadAlerts = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true)
     setHasError(false)
     try {
       // Use the dedicated lookalikes endpoint — supports up to 50 results per page.
@@ -107,12 +107,19 @@ export function DomainDiscovery() {
       console.error("Failed to load lookalike alerts:", err)
       setHasError(true)
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
     loadAlerts()
+    
+    // Set up a 5-second poll interval for real-time automatic synchronization
+    const interval = setInterval(() => {
+      loadAlerts(true)
+    }, 5000)
+
+    return () => clearInterval(interval)
   }, [loadAlerts])
 
   // ── Derived stats (score-aware) ────────────────────────────────────────────

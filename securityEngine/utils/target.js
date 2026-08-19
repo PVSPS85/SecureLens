@@ -33,8 +33,8 @@ class TargetUtils {
       }
     }
 
-    // Assume Domain
-    const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/i;
+    // Assume Domain (Unicode-aware to support homoglyphs/IDNs)
+    const domainRegex = /^(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?\.)+[\p{L}\p{N}][\p{L}\p{N}-]{0,61}[\p{L}\p{N}]$/iu;
     if (domainRegex.test(trimmed)) {
       return { type: 'domain', value: trimmed.toLowerCase(), raw: input };
     }
