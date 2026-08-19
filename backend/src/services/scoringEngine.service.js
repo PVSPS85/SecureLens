@@ -59,13 +59,14 @@ export const calculateRiskResult = (evidencePayload = {}) => {
   // 3. Enforce validation boundaries on risk score limits
   const score = Math.max(0, Math.min(100, Math.round(baseScore)));
 
-  // 4. Map score ranges to formal risk levels
+  // 4. Map score ranges to paranoia-mode risk bands (matches rulebook.engine.js)
+  //    0–15  → LOW  |  16–40 → MEDIUM  |  41–75 → HIGH  |  76–100 → CRITICAL
   let riskLevel = 'LOW';
-  if (score >= 80) {
+  if (score >= 76) {
     riskLevel = 'CRITICAL';
-  } else if (score >= 60) {
+  } else if (score >= 41) {
     riskLevel = 'HIGH';
-  } else if (score >= 30) {
+  } else if (score >= 16) {
     riskLevel = 'MEDIUM';
   }
 
