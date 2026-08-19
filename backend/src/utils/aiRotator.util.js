@@ -14,6 +14,12 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
   const geminiKeys = config.geminiApiKeys || [];
   const groqKeys = config.grokApiKeys || [];
 
+  // Diagnostic: log key counts so misconfiguration is immediately visible
+  logger.info(`[AIRotator] Loaded ${geminiKeys.length} Gemini key(s), ${groqKeys.length} Groq key(s)`);
+  if (geminiKeys.length === 0 && groqKeys.length === 0) {
+    console.error('[AIRotator] FATAL: No AI API keys configured. Check GEMINI_API_KEYS and GROQ_API_KEYS in .env');
+  }
+
   // Loop 1: Iterate through the Gemini API keys
   for (let i = 0; i < geminiKeys.length; i++) {
     const key = geminiKeys[i];
@@ -27,12 +33,13 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
         systemInstruction: systemPrompt
       });
       
-      const response = await result.response;
+      const response = result.response;
       const text = response.text();
       if (text) {
         return text.trim();
       }
     } catch (error) {
+      console.error(`[AIRotator] Gemini key[${i}] FAILED: ${error.message}`);
       logger.warn(`[AIRotator] Gemini API key index ${i} failed: ${error.message}`);
     }
   }
@@ -61,6 +68,8 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
         });
 
         if (!response.ok) {
+          const errBody = await response.text().catch(() => '');
+          console.error(`[AIRotator] Groq key[${i}] HTTP ${response.status}: ${errBody.slice(0, 200)}`);
           throw new Error(`Groq API returned status: ${response.status}`);
         }
 
@@ -70,12 +79,16 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
           return text.trim();
         }
       } catch (error) {
+        console.error(`[AIRotator] Groq key[${i}] FAILED: ${error.message}`);
         logger.warn(`[AIRotator] Groq API key index ${i} failed: ${error.message}`);
       }
     }
+  } else {
+    console.error('[AIRotator] No Groq keys available (GROQ_API_KEYS env var missing or empty).');
   }
 
   // Ultimate Fallback
+  console.error('[AIRotator] ALL providers exhausted. Returning hardcoded fallback. Check your API keys and quotas.');
   logger.error('[AIRotator] All API providers and keys failed to generate a response.');
   return 'SecureAI explanation is currently unavailable due to high demand. Please refer to the technical evidence below.';
 };

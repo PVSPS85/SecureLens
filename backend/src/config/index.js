@@ -42,8 +42,9 @@ if (!validEnvironments.includes(process.env.NODE_ENV)) {
 const geminiApiKeys = process.env.GEMINI_API_KEYS
   ? process.env.GEMINI_API_KEYS.split(',').map((k) => k.trim()).filter(Boolean)
   : [];
-const grokApiKeys = process.env.GROK_API_KEYS
-  ? process.env.GROK_API_KEYS.split(',').map((k) => k.trim()).filter(Boolean)
+// NOTE: The env var is GROQ_API_KEYS (not GROK) — must match .env exactly
+const grokApiKeys = process.env.GROQ_API_KEYS
+  ? process.env.GROQ_API_KEYS.split(',').map((k) => k.trim()).filter(Boolean)
   : [];
 
 export const config = {

@@ -206,6 +206,12 @@ export const startScan = async (req, res, next) => {
     const riskLevel = riskResult.riskLevel;
 
     // 7. Commit findings report to Database reports table
+    // Diagnostic: log screenshot presence before DB write
+    const evidenceJson = engineEvidence.evidence?.toJSON ? engineEvidence.evidence.toJSON() : (engineEvidence.evidence || {});
+    const browserScreenshotLen = evidenceJson?.analyzers?.browser?.data?.screenshot?.length || 0;
+    const visualScreenshotLen  = evidenceJson?.analyzers?.visual?.data?.screenshot?.length  || 0;
+    logger.info(`[Scan Controller] Pre-DB evidence check — browser screenshot bytes: ${browserScreenshotLen}, visual screenshot bytes: ${visualScreenshotLen}`);
+
     await insertReport({
       scanId,
       summary: `Vulnerability audit completed for target ${normalized.normalizedUrl}`,
@@ -213,7 +219,7 @@ export const startScan = async (req, res, next) => {
       infrastructure: { 
         analyzedAt: engineEvidence.analyzedAt,
         engineSignatureVersion: engineEvidence.metadata?.engineSignatureVersion || 'live',
-        evidence: engineEvidence.evidence
+        evidence: evidenceJson  // Use the plain JSON object, not the class instance
       },
       recommendation: riskResult.recommendation,
       timeline: [
@@ -247,8 +253,8 @@ export const startScan = async (req, res, next) => {
       confidence: riskResult.confidence,
       findings: riskResult.findings,
       recommendations: riskResult.recommendation ? riskResult.recommendation.split('\n') : [],
-      // Pass through full engine evidence so screenshot is available in Investigate view
-      evidence: engineEvidence.evidence || {}
+      // Pass through the pre-serialized evidence JSON so screenshot is available immediately
+      evidence: evidenceJson
     };
 
     // Populate RAM cache for future hits

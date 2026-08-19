@@ -158,10 +158,15 @@ export function Investigate() {
           const aiRes = await fetch(`http://localhost:5001/api/v1/secure-ai/summary/${activeId}`)
           if (aiRes.ok) {
             const aiJson = await aiRes.json()
-            if (isMounted && aiJson?.data) setAiData(aiJson.data)
+            // The endpoint returns { success, cached, summary } at the top level (no .data wrapper)
+            console.log('[Investigate] SecureAI summary response:', { success: aiJson?.success, cached: aiJson?.cached, hasSummary: Boolean(aiJson?.summary) })
+            if (isMounted && aiJson?.summary) {
+              setAiData({ summary: aiJson.summary })
+            }
           }
         } catch (e) {
           // AI endpoint is optional
+          console.warn('[Investigate] SecureAI summary fetch failed:', e)
         }
       } catch (err) {
         console.warn("Dynamic report fetch failed:", err)
@@ -216,6 +221,14 @@ export function Investigate() {
   const findings = reportData?.results?.findings || []
   const evidence = reportData?.results?.evidence || {}
   const analyzers = evidence?.analyzers || {}
+
+  // Diagnostic: log the full analyzers tree keys so screenshot path is visible in browser console
+  console.log('[Investigate] Evidence analyzers keys:', Object.keys(analyzers))
+  console.log('[Investigate] browser.data keys:', analyzers.browser?.data ? Object.keys(analyzers.browser.data) : 'N/A')
+  console.log('[Investigate] visual.data keys:', analyzers.visual?.data ? Object.keys(analyzers.visual.data) : 'N/A')
+  console.log('[Investigate] browser screenshot present:', Boolean(analyzers.browser?.data?.screenshot))
+  console.log('[Investigate] visual screenshot present:', Boolean(analyzers.visual?.data?.screenshot))
+
   const screenshotData =
     analyzers.visual?.data?.screenshot ||
     analyzers.visual?.screenshot ||
