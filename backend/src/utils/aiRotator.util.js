@@ -46,6 +46,7 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
 
   // Loop 2: Fallback to Groq API keys if Gemini keys failed or are empty
   if (groqKeys.length > 0) {
+    console.warn("Gemini failed, falling back to Groq...");
     logger.info('[AIRotator] All Gemini keys exhausted or empty. Falling back to Groq API keys...');
     for (let i = 0; i < groqKeys.length; i++) {
       const key = groqKeys[i];
