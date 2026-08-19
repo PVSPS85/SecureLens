@@ -4,6 +4,7 @@ import { analyzeTarget } from '../services/securityEngine.interface.js';
 import { calculateRiskResult } from '../services/scoringEngine.service.js';
 import { insertScan, updateScanStatus, getScanById } from '../db/queries/scans.queries.js';
 import { insertReport, getReportByScanId } from '../db/queries/reports.queries.js';
+import { insertLookalikeAlert } from '../db/queries/lookalike.queries.js';
 import supabase from '../db/client.js';
 import logger from '../utils/logger.js';
 
@@ -12,6 +13,75 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 // Double-layer cache system: RAM cache to serve repeat scans in <2ms
 const scanMemoryCache = new Map();
+
+/**
+ * Asynchronously checks whether the completed scan has lookalike / brand-
+ * impersonation signals and, if so, writes a row to `lookalike_alerts`.
+ *
+ * Runs as a detached background promise — never blocks the HTTP response.
+ *
+ * Triggers when EITHER:
+ *   a) The LookalikeAnalyzer flagged potentialImpersonation, OR
+ *   b) riskScore >= 76 (CRITICAL) AND the lookalike analyzer ran successfully.
+ *
+ * @param {string} candidateDomain  - The normalised target domain/URL.
+ * @param {object} engineEvidence   - Raw SecurityEngine evidence payload.
+ * @param {number} riskScore        - Final calculated risk score (0-100).
+ * @param {string} riskLevel        - Risk level string ('CRITICAL', 'HIGH', etc.)
+ */
+async function maybeIngestLookalikeAlert(candidateDomain, engineEvidence, riskScore, riskLevel) {
+  try {
+    const analyzers = engineEvidence?.evidence?.analyzers || {};
+    const lookData  = analyzers.lookalike?.data || {};
+
+    const potentialImpersonation = Boolean(lookData.potentialImpersonation);
+    const containsHomoglyphs     = Boolean(lookData.containsHomoglyphs);
+    const matchedBrands          = Array.isArray(lookData.matchedBrands) ? lookData.matchedBrands : [];
+
+    // Only ingest if there is an actual lookalike signal
+    const shouldIngest = potentialImpersonation || containsHomoglyphs;
+    if (!shouldIngest) return;
+
+    // Build the detection type label
+    let detectionType = 'Lookalike Domain';
+    if (containsHomoglyphs && potentialImpersonation) {
+      detectionType = 'Homoglyph + Brand Impersonation';
+    } else if (containsHomoglyphs) {
+      detectionType = 'Homoglyph / Punycode Spoofing';
+    } else if (potentialImpersonation) {
+      detectionType = 'Brand Impersonation';
+    }
+
+    const topMatch = matchedBrands[0] || {};
+    const matchedBrand     = topMatch.brand || null;
+    const similarityScore  = typeof topMatch.similarityScore === 'number' ? topMatch.similarityScore : null;
+
+    logger.warn(
+      `[Scan Controller] Lookalike signal detected for "${candidateDomain}" — ` +
+      `ingesting into lookalike_alerts (type: ${detectionType}, score: ${riskScore})`
+    );
+
+    await insertLookalikeAlert({
+      candidateDomain,
+      matchedBrand,
+      similarityScore,
+      riskLevel: riskLevel.toUpperCase(),
+      detectionType,
+      status: 'active',
+      evidenceSummary: {
+        riskScore,
+        containsHomoglyphs,
+        potentialImpersonation,
+        matchedBrands
+      }
+    });
+
+    logger.info(`[Scan Controller] Lookalike alert persisted for "${candidateDomain}"`);
+  } catch (err) {
+    // Log failure but never throw — this must never crash the scan pipeline
+    logger.error(`[Scan Controller] Failed to ingest lookalike alert: ${err.message}`);
+  }
+}
 
 /**
  * Initiates and orchestrates the full user scan request lifecycle.
@@ -155,6 +225,11 @@ export const startScan = async (req, res, next) => {
 
     // 8. Transition status state to completed
     await updateScanStatus(scanId, 'completed', riskScore, riskLevel);
+
+    // 8b. ASYNC: If the scan flagged a lookalike / brand-impersonation signal,
+    //     write it to lookalike_alerts in the background (non-blocking fire-and-forget).
+    maybeIngestLookalikeAlert(normalized.normalizedUrl, engineEvidence, riskScore, riskLevel)
+      .catch(() => {}); // already logged inside the function
 
     const freshResponseData = {
       scanId,
