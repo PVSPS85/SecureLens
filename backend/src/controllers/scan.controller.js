@@ -10,6 +10,9 @@ import logger from '../utils/logger.js';
 // Matches standard RFC 4122 UUID v4 formatting syntax
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// Double-layer cache system: RAM cache to serve repeat scans in <2ms
+const scanMemoryCache = new Map();
+
 /**
  * Initiates and orchestrates the full user scan request lifecycle.
  * Writes records to PostgreSQL database using live Supabase queries.
@@ -42,7 +45,68 @@ export const startScan = async (req, res, next) => {
 
     const { type, details } = req.validatedTarget; // Extracted from validate middleware
 
-    // 2. Initialize tracking record in the Postgres scans table
+    // 2a. RAM Memory Cache Lookup (Primary cache layer)
+    if (scanMemoryCache.has(normalized.normalizedUrl)) {
+      logger.info(`[Scan Controller] RAM Cache HIT for target: "${normalized.normalizedUrl}"`);
+      const cachedResponse = scanMemoryCache.get(normalized.normalizedUrl);
+      return res.status(200).json({
+        success: true,
+        data: {
+          ...cachedResponse,
+          cached: true
+        }
+      });
+    }
+
+    // 2b. Database Cache Lookup (Secondary cache layer fallback)
+    logger.info(`[Scan Controller] Checking scan database cache for target: "${normalized.normalizedUrl}"`);
+    const { data: existingScans, error: cacheError } = await supabase
+      .from('scans')
+      .select('*')
+      .eq('normalized_target', normalized.normalizedUrl)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (!cacheError && existingScans && existingScans.length > 0) {
+      const match = existingScans[0];
+      const report = await getReportByScanId(match.id);
+      
+      if (report) {
+        logger.info(`[Scan Controller] Database Cache HIT for target: "${normalized.normalizedUrl}" | Scan ID: ${match.id}`);
+        
+        const responseData = {
+          scanId: match.id,
+          scan: {
+            id: match.id,
+            target: normalized.normalizedUrl,
+            risk_score: match.risk_score,
+            risk_level: match.risk_level.toLowerCase()
+          },
+          target: normalized.normalizedUrl,
+          type: match.target_type,
+          status: 'completed',
+          riskScore: match.risk_score,
+          riskLevel: match.risk_level,
+          confidence: report.confidence || 0.95,
+          findings: report.findings,
+          recommendations: report.recommendation ? report.recommendation.split('\n') : []
+        };
+
+        // Populate RAM cache for future hits
+        scanMemoryCache.set(normalized.normalizedUrl, responseData);
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            ...responseData,
+            cached: true
+          }
+        });
+      }
+    }
+
+    // 3. Initialize tracking record in the Postgres scans table
     const scanRecord = await insertScan({
       userId: req.user ? req.user.id : null,
       target: target,
@@ -56,29 +120,30 @@ export const startScan = async (req, res, next) => {
 
     const scanId = scanRecord.id;
 
-    // 3. Progress scan status to running
+    // 4. Progress scan status to running
     await updateScanStatus(scanId, 'running', 0, 'unknown');
 
-    // 4. Invoke Security Engine analysis (simulated facts audit)
+    // 5. Invoke Security Engine analysis (simulated facts audit)
     const engineEvidence = await analyzeTarget({
-      target: normalized.normalizedUrl,
+      target: type === 'domain' ? target : normalized.normalizedUrl,
       type,
       details
     });
 
-    // 5. Build authoritative risk metrics using Security Rulebook Scoring Engine
+    // 6. Build authoritative risk metrics using Security Rulebook Scoring Engine
     const riskResult = calculateRiskResult(engineEvidence);
     const riskScore = riskResult.score;
     const riskLevel = riskResult.riskLevel;
 
-    // 6. Commit findings report to Database reports table
+    // 7. Commit findings report to Database reports table
     await insertReport({
       scanId,
       summary: `Vulnerability audit completed for target ${normalized.normalizedUrl}`,
       findings: riskResult.findings,
       infrastructure: { 
         analyzedAt: engineEvidence.analyzedAt,
-        engineSignatureVersion: engineEvidence.metadata.engineSignatureVersion
+        engineSignatureVersion: engineEvidence.metadata?.engineSignatureVersion || 'live',
+        evidence: engineEvidence.evidence
       },
       recommendation: riskResult.recommendation,
       timeline: [
@@ -88,32 +153,36 @@ export const startScan = async (req, res, next) => {
       rulebookVersion: riskResult.rulebookVersion
     });
 
-    // 7. Transition status state to completed
+    // 8. Transition status state to completed
     await updateScanStatus(scanId, 'completed', riskScore, riskLevel);
 
-    // 8. Return response containing the fully compiled risk report
+    const freshResponseData = {
+      scanId,
+      scan: {
+        id: scanId,
+        target: normalized.normalizedUrl,
+        risk_score: riskScore,
+        risk_level: riskLevel.toLowerCase()
+      },
+      target: normalized.normalizedUrl,
+      type,
+      status: 'completed',
+      riskScore,
+      riskLevel,
+      confidence: riskResult.confidence,
+      findings: riskResult.findings,
+      recommendations: riskResult.recommendation ? riskResult.recommendation.split('\n') : []
+    };
+
+    // Populate RAM cache for future hits
+    scanMemoryCache.set(normalized.normalizedUrl, freshResponseData);
+
+    // 9. Return response containing the fully compiled risk report
     // INTEGRATION NOTE: Returns BOTH legacy flat variables and the nested 'scan'
     // object expected by instructional guides and frontend schemas.
     res.status(201).json({
       success: true,
-      data: {
-        scanId,
-        // Nested scan object structure specifically for documentation compatibility
-        scan: {
-          id: scanId,
-          target: normalized.normalizedUrl,
-          risk_score: riskScore,
-          risk_level: riskLevel.toLowerCase() // Lowercase verdict match (e.g. 'low')
-        },
-        target: normalized.normalizedUrl,
-        type,
-        status: 'completed',
-        riskScore,
-        riskLevel,
-        confidence: riskResult.confidence,
-        findings: riskResult.findings,
-        recommendations: riskResult.recommendation ? riskResult.recommendation.split('\n') : []
-      }
+      data: freshResponseData
     });
   } catch (error) {
     // Forward all system errors to centralized error middleware
@@ -216,7 +285,8 @@ export const getScanReport = async (req, res, next) => {
           score: scan.risk_score,
           riskLevel: scan.risk_level,
           findings: report.findings,
-          recommendations: report.recommendation ? report.recommendation.split('\n') : []
+          recommendations: report.recommendation ? report.recommendation.split('\n') : [],
+          evidence: report.infrastructure?.evidence || {}
         } : null
       }
     });

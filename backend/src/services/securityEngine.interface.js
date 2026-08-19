@@ -1,6 +1,5 @@
 import logger from '../utils/logger.js';
-
-/**
+import SecurityEngine from '../../../securityEngine/index.js';/**
  * Provisional Security Engine Interface.
  * Serves as a contract boundary for the scanning core.
  */
@@ -15,72 +14,38 @@ import logger from '../utils/logger.js';
 export const analyzeTarget = async (normalizedTargetData) => {
   const { target, type, details } = normalizedTargetData;
 
-  logger.info(`[Provisional Security Engine] Starting analysis for Target: "${target}" | Type: "${type}"`);
+  logger.info(`[Security Engine] Starting live analysis for Target: "${target}" | Type: "${type}"`);
 
-  // Simulate remote security engine computation delay
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  const engine = new SecurityEngine();
+  let results;
 
-  // Determine structural score offsets based on target context
-  const isUrl = type === 'url';
-  const scoreBase = isUrl ? 75 : 45;
-  const confidence = isUrl ? 0.96 : 0.85;
-  const completeness = details ? 0.90 : 0.70;
-
-  // Mock Findings mapping to conceptual database models
-  const findings = [
-    {
-      id: 'FIND-ID-HSTS',
-      vulnerability: 'Missing Strict-Transport-Security Header',
-      severity: 'medium',
-      confidence: 0.98,
-      description: 'The host does not enforce HTTPS communication using the HTTP Strict-Transport-Security (HSTS) header, allowing potential SSL strip attacks.',
-      recommendation: 'Configure HSTS headers with appropriate max-age parameters (e.g. Strict-Transport-Security: max-age=31536000; includeSubDomains).'
-    },
-    {
-      id: 'FIND-ID-SERVER',
-      vulnerability: 'Server Brand Banner Exposure',
-      severity: 'low',
-      confidence: 0.92,
-      description: 'Response headers disclose server engine identifiers (e.g., nginx version details), which could assist attackers in targeting version-specific exploits.',
-      recommendation: 'Configure the web server configurations to disable version disclosure headers.'
-    }
-  ];
-
-  // Optional third finding for domains
-  if (type === 'domain') {
-    findings.push({
-      id: 'FIND-ID-DNSSEC',
-      vulnerability: 'Missing DNSSEC Signing',
-      severity: 'info',
-      confidence: 0.88,
-      description: 'The target domain does not implement Domain Name System Security Extensions (DNSSEC) DNS records.',
-      recommendation: 'Enable DNSSEC signing with your domain registry provider.'
-    });
+  try {
+    results = await engine.scan(target);
+  } catch (error) {
+    logger.error(`[Security Engine] Fatal error analyzing target ${target}: ${error.message}`);
+    throw error;
   }
 
-  // Warnings structure mapping to scanning hiccups
-  const warnings = [];
-  if (!isUrl) {
-    warnings.push({
-      code: 'WARN_NO_SCHEME',
-      message: 'No protocol scheme was provided. Analysis fell back to default HTTP/HTTPS ports.'
-    });
-  }
-
-  logger.info(`[Provisional Security Engine] Completed analysis for Target: "${target}" | Findings Count: ${findings.length}`);
+  logger.info(`[Security Engine] Completed live analysis for Target: "${target}"`);
 
   return {
     target,
     type,
-    analyzedAt: new Date().toISOString(),
-    confidence,
-    completeness,
-    riskScore: Math.round(scoreBase * (1.1 - confidence)),
-    findings,
-    warnings,
+    analyzedAt: results.timestamp,
+    confidence: results.confidence,
+    completeness: results.completeness,
+    riskScore: results.assessment?.riskScore || 0,
+    findings: results.assessment?.detectedRisks?.map((risk, index) => ({
+      id: `FIND-${index}`,
+      severity: risk.split(':')[0].toLowerCase().trim(),
+      description: risk.split(':').slice(1).join(':').trim(),
+      recommendation: 'Review the identified risk in the full scan report.'
+    })) || [],
+    warnings: [],
+    evidence: results.evidence, // CRITICAL: preserve raw analyzer data
     metadata: {
-      engineSignatureVersion: '2026.08.18-01',
-      engineHash: 'sha256-a8f27bd6f120e2ef5b1e5233bc21db33'
+      engineSignatureVersion: '2026.08.19-live',
+      engineHash: 'sha256-live-engine-integration'
     }
   };
 };

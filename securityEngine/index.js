@@ -11,6 +11,11 @@ const CompletenessCalculator = require('./aggregation/completeness');
 const ConfidenceCalculator = require('./aggregation/confidence');
 const FailureHandler = require('./aggregation/failure-handler');
 const RulebookAdapter = require('./rulebook/rulebook.adapter');
+const RedirectAnalyzer = require('./analyzers/redirects/redirect.analyzer');
+const ThreatIntelAnalyzer = require('./analyzers/threat-intelligence/threat-intel.analyzer');
+const BrowserAnalyzer = require('./analyzers/browser/browser.analyzer');
+const VisualAnalyzer = require('./analyzers/visual/visual.analyzer');
+const dns = require('dns').promises;
 
 class SecurityEngine {
   constructor(config = {}) {
@@ -22,7 +27,11 @@ class SecurityEngine {
       new TLSAnalyzer(),
       new HTTPAnalyzer(),
       new LookalikeAnalyzer(),
-      new IPASNAnalyzer()
+      new IPASNAnalyzer(),
+      new RedirectAnalyzer(),
+      new ThreatIntelAnalyzer(),
+      new BrowserAnalyzer(),
+      new VisualAnalyzer()
     ];
   }
 
@@ -32,6 +41,16 @@ class SecurityEngine {
    */
   async scan(rawTarget) {
     const targetContext = TargetUtils.parseTarget(rawTarget);
+
+    // Fallback: If target is not an IP, resolve it so IPASNAnalyzer has an IP to test
+    if (targetContext.type !== 'ip' && !targetContext.resolvedIp) {
+      try {
+        const lookupResult = await dns.lookup(targetContext.hostname || targetContext.value);
+        targetContext.resolvedIp = lookupResult.address;
+      } catch (err) {
+        // Continue silently; IPASNAnalyzer will fail gracefully
+      }
+    }
 
     // Execute all analyzers concurrently with failure isolation
     const analyzerPromises = this.analyzers.map(analyzer => 
