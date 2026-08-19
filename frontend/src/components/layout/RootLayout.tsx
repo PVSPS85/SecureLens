@@ -133,12 +133,10 @@ export function RootLayout() {
         }
       }
 
-      // Context-aware fallback if outside a specific scan or backend AI offline
-      const genericAnswer = userText.toLowerCase().includes("safe")
-        ? "Evaluation advice: Always verify that TLS certificates match the authoritative domain, check for multi-hop redirect anomalies, and ensure no unauthenticated credential-entry forms exist on newly registered domains."
-        : `Analysis Insight: For this target, SecureLens evaluates converging indicators across DNS records, TLS certificate authority validation, and visual lookalike models to determine confidence scores.`
+      // Context-aware fallback if outside a specific scan investigation
+      const genericAnswer = `To get investigation-specific answers, open a scan report from the Dashboard or History page. SecureAI will automatically load the context from that investigation and answer questions about the specific target, its risk score, and findings.\n\nFor general security guidance: always verify TLS certificate chains, check for homoglyph character substitutions in domain names, and review HSTS and CSP headers for any site handling credentials.`
 
-      setSecureAIMessages(msgs => [...msgs, { role: "ai", text: genericAnswer, chips: ["Rulebook", "Security Engine"] }])
+      setSecureAIMessages(msgs => [...msgs, { role: "ai", text: genericAnswer, chips: ["Tip", "Security Engine"] }])
     } catch (err) {
       setSecureAIMessages(msgs => [...msgs, { role: "ai", text: "SecureAI engine is evaluating the latest telemetry findings for this target. All indicators have been logged to the report.", chips: ["Telemetry"] }])
     } finally {

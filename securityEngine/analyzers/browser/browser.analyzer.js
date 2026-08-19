@@ -32,13 +32,30 @@ class BrowserAnalyzer extends BaseAnalyzer {
       const inputFields = await page.$$eval('input', inputs => inputs.map(i => i.type));
       const hasPasswordField = inputFields.includes('password');
 
+      // Capture a full-page screenshot as a base64 buffer
+      let screenshotBase64 = null;
+      try {
+        const screenshotBuffer = await page.screenshot({
+          type: 'jpeg',
+          quality: 75,
+          fullPage: false,
+          clip: { x: 0, y: 0, width: 1280, height: 720 }
+        });
+        screenshotBase64 = screenshotBuffer.toString('base64');
+        // Share with VisualAnalyzer via context
+        context.screenshotBuffer = screenshotBase64;
+      } catch (ssErr) {
+        // Screenshot failed (CSP / blocked) — continue without it
+      }
+
       await browser.close();
 
       return this.formatResult(true, {
         title: pageTitle,
         hasPasswordField,
         inputCount: inputFields.length,
-        bodyTextSnippet: sanitizedText
+        bodyTextSnippet: sanitizedText,
+        screenshot: screenshotBase64
       });
     } catch (err) {
       if (browser) await browser.close().catch(() => {});

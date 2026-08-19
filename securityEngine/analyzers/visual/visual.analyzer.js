@@ -7,9 +7,13 @@ class VisualAnalyzer extends BaseAnalyzer {
 
   async analyze(context) {
     try {
-      // Fact-only extraction for visual layout indicators
+      // screenshotBuffer is set by BrowserAnalyzer on the shared context object
+      // so both analyzers can reference the same captured image.
+      const screenshotBase64 = context.screenshotBuffer || null;
+
       const evidence = {
-        hasScreenshot: Boolean(context.screenshotBuffer),
+        hasScreenshot: Boolean(screenshotBase64),
+        screenshot: screenshotBase64,           // base64 JPEG — forwarded to frontend
         perceptualHash: context.perceptualHash || null,
         isVisualMatch: false
       };

@@ -171,7 +171,9 @@ export const startScan = async (req, res, next) => {
       riskLevel,
       confidence: riskResult.confidence,
       findings: riskResult.findings,
-      recommendations: riskResult.recommendation ? riskResult.recommendation.split('\n') : []
+      recommendations: riskResult.recommendation ? riskResult.recommendation.split('\n') : [],
+      // Pass through full engine evidence so screenshot is available in Investigate view
+      evidence: engineEvidence.evidence || {}
     };
 
     // Populate RAM cache for future hits
