@@ -210,10 +210,10 @@ export function Investigate() {
     reportData?.screenshot ||
     null
 
-  const critCount = findings.filter((f: any) => f.severity === "critical").length || (reportData ? 0 : 4)
-  const highCount = findings.filter((f: any) => f.severity === "high").length || (reportData ? 0 : 3)
-  const medCount = findings.filter((f: any) => f.severity === "medium").length || (reportData ? findings.length : 2)
-  const lowCount = findings.filter((f: any) => f.severity === "low" || f.severity === "info").length || (reportData ? 0 : 1)
+  const critCount = findings.filter((f: any) => f.severity === "critical").length
+  const highCount = findings.filter((f: any) => f.severity === "high").length
+  const medCount = findings.filter((f: any) => f.severity === "medium").length
+  const lowCount = findings.filter((f: any) => f.severity === "low" || f.severity === "info").length
 
   const isCritRisk = rawRiskLevel === "CRITICAL"
   const isHighRisk = rawRiskLevel === "HIGH"
@@ -495,7 +495,12 @@ export function Investigate() {
         {/* Timeline */}
         <aside className="xl:order-3">
           <div className="xl:sticky xl:top-4">
-            <Timeline />
+            <Timeline
+              completedAt={reportData?.completedAt}
+              analyzers={analyzers}
+              findings={findings}
+              riskScore={riskScore}
+            />
           </div>
         </aside>
       </div>

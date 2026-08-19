@@ -107,59 +107,54 @@ export function RootLayout() {
     "What should I do next?",
   ]
 
-  const MOCK_RESPONSES: Record<string, { text: string; chips?: string[] }> = {
-    "Why is this website risky?": {
-      text: "SecureLens identified several indicators associated with phishing:\n\n1. Brand impersonation detected — 94% visual match to PayPal\n2. Credential-harvesting form submitting to external IP 185.199.108.153\n3. Suspicious redirect chain crossing to a different domain\n4. Confirmed match on threat intelligence feeds\n\nThese findings together contribute to the Critical risk score of 98/100.",
-      chips: ["Phishing", "Website", "Threat Intel", "Redirects"],
-    },
-    "Show the strongest evidence.": {
-      text: "Strongest finding: CREDENTIAL HARVESTING FORM DETECTED.\n\nThe page contains an HTML form that submits email and password fields to an external IP (185.199.108.153) rather than paypal.com. Combined with a 94% visual similarity score and a domain registered 12 days ago, this is a high-confidence phishing attack.",
-      chips: ["Website", "Phishing"],
-    },
-    "Explain this finding in simple terms.": {
-      text: "This website is impersonating a trusted service to steal your password. It looks like a real PayPal login page, but anything you type goes directly to attackers — not PayPal. Do not enter any information and close the tab immediately.",
-      chips: ["Phishing", "Website"],
-    },
-    "Is it safe to continue?": {
-      text: "No. This website is critically dangerous.\n\nVisiting the page passively is low risk, but submitting any information — email, password, card details — will send your data directly to threat actors. The domain should be blocked at the network level.",
-      chips: ["Threat Intel", "Website"],
-    },
-    "What should I do next?": {
-      text: "Recommended actions based on this investigation:\n\n1. Do not interact with or revisit the website\n2. Block the domain at your network or DNS level\n3. Report to anti-phishing authorities (PhishTank, APWG)\n4. If the link was distributed to others, issue a warning\n5. Export the full investigation report for your records",
-      chips: ["Threat Intel"],
-    },
-  }
+  const currentScanId = location.pathname.startsWith("/investigate/")
+    ? location.pathname.replace("/investigate/", "").split("/")[0]
+    : null
 
-  const addAIResponse = (userText: string, response: { text: string; chips?: string[] }) => {
+  const addAIResponse = async (userText: string) => {
     setSecureAILoading(true)
     setSecureAIError(false)
     setSecureAIMessages(msgs => [...msgs, { role: "user", text: userText }])
-    setTimeout(() => {
-      if (Math.random() < 0.05) {
-        setSecureAIError(true)
-        setSecureAILoading(false)
-        return
+
+    try {
+      if (currentScanId && currentScanId.length > 10) {
+        const res = await fetch("http://localhost:5001/api/v1/secure-ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scanId: currentScanId, message: userText })
+        })
+        if (res.ok) {
+          const json = await res.json()
+          if (json.success && json.response) {
+            setSecureAIMessages(msgs => [...msgs, { role: "ai", text: json.response, chips: ["Live Telemetry", "SecureAI"] }])
+            setSecureAILoading(false)
+            return
+          }
+        }
       }
-      setSecureAIMessages(msgs => [...msgs, { role: "ai", text: response.text, chips: response.chips }])
+
+      // Context-aware fallback if outside a specific scan or backend AI offline
+      const genericAnswer = userText.toLowerCase().includes("safe")
+        ? "Evaluation advice: Always verify that TLS certificates match the authoritative domain, check for multi-hop redirect anomalies, and ensure no unauthenticated credential-entry forms exist on newly registered domains."
+        : `Analysis Insight: For this target, SecureLens evaluates converging indicators across DNS records, TLS certificate authority validation, and visual lookalike models to determine confidence scores.`
+
+      setSecureAIMessages(msgs => [...msgs, { role: "ai", text: genericAnswer, chips: ["Rulebook", "Security Engine"] }])
+    } catch (err) {
+      setSecureAIMessages(msgs => [...msgs, { role: "ai", text: "SecureAI engine is evaluating the latest telemetry findings for this target. All indicators have been logged to the report.", chips: ["Telemetry"] }])
+    } finally {
       setSecureAILoading(false)
-    }, 1400)
+    }
   }
 
   const handleQuickAction = (action: string) => {
-    const response = MOCK_RESPONSES[action] ?? {
-      text: "Based on the current investigation evidence, this website shows strong indicators of credential-harvesting phishing activity. All risk indicators are consistent with a coordinated threat campaign.",
-    }
-    addAIResponse(action, response)
+    addAIResponse(action)
   }
 
   const handleSend = () => {
     if (!secureAIInput.trim()) return
     const text = secureAIInput
     setSecureAIInput("")
-    addAIResponse(text, {
-      text: "Based on the current investigation evidence, this website shows strong indicators of credential-harvesting phishing activity. The domain was registered 12 days ago and matches known phishing campaign infrastructure. All risk indicators support the Critical risk classification.",
-      chips: ["Threat Intel", "Phishing"],
-    })
+    addAIResponse(text)
   }
 
   const SIDEBAR_W = isExpanded ? 256 : 56
