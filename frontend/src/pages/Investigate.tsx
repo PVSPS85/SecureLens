@@ -17,6 +17,7 @@ import {
   Info,
   Lock,
   Eye,
+  Globe,
 } from "lucide-react"
 import { StickyNav } from "../components/investigation/StickyNav"
 import { Timeline } from "../components/investigation/Timeline"
@@ -68,10 +69,27 @@ function Stat({
   )
 }
 
-/* Phishing page mockup */
-function PhishingPageMockup({ domain = "suspicious-login-update.net" }: { domain?: string }) {
+/* Dynamic website screenshot or fallback */
+function WebsiteScreenshot({
+  domain,
+  screenshotData,
+}: {
+  domain: string
+  screenshotData?: string | null
+}) {
+  const formatSrc = (raw?: string | null) => {
+    if (!raw) return null
+    if (raw.startsWith("data:") || raw.startsWith("http://") || raw.startsWith("https://")) {
+      return raw
+    }
+    const mime = raw.startsWith("iVBORw0KGgo") ? "image/png" : "image/jpeg"
+    return `data:${mime};base64,${raw}`
+  }
+
+  const src = formatSrc(screenshotData)
+
   return (
-    <div className="relative rounded-lg overflow-hidden border border-border bg-white select-none" style={{ fontFamily: "system-ui, sans-serif" }}>
+    <div className="relative rounded-lg overflow-hidden border border-border bg-white shadow-sm select-none">
       {/* Browser chrome */}
       <div className="flex items-center gap-2 bg-[#f1f3f4] border-b border-[#dadce0] px-3 py-2">
         <div className="flex gap-1">
@@ -81,39 +99,28 @@ function PhishingPageMockup({ domain = "suspicious-login-update.net" }: { domain
         </div>
         <div className="flex-1 flex items-center gap-1.5 bg-white rounded border border-[#dadce0] px-2 py-1 mx-2">
           <Lock className="h-2.5 w-2.5 text-[#5f6368]" />
-          <span className="text-[10px] text-[#202124] truncate">{domain}</span>
+          <span className="text-[10px] text-[#202124] font-mono truncate">{domain}</span>
         </div>
       </div>
-      {/* Page content preview */}
-      <div className="p-5 bg-[#f8faff]">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <div className="h-6 w-6 rounded bg-[#003087] flex items-center justify-center">
-            <span className="text-white font-bold text-[10px]">P</span>
-          </div>
-          <span className="text-[#003087] font-bold text-sm">Authentication</span>
+
+      {/* Render screenshot or fallback placeholder */}
+      {src ? (
+        <div className="bg-muted/10 max-h-80 overflow-y-auto">
+          <img
+            src={src}
+            alt={`Website Audit Screenshot of ${domain}`}
+            className="w-full h-auto object-cover object-top"
+          />
         </div>
-        <p className="text-center text-[11px] text-[#333] font-semibold mb-4">Verification Portal</p>
-        <div className="space-y-2.5 max-w-[220px] mx-auto">
-          <div>
-            <label className="text-[9px] text-[#6c6c6c] block mb-0.5">Email or Account ID</label>
-            <div className="border border-[#bfc2c7] rounded px-2 py-1.5 bg-white text-[10px] text-[#aaa]">user@example.com</div>
-          </div>
-          <div>
-            <label className="text-[9px] text-[#6c6c6c] block mb-0.5">Password</label>
-            <div className="border border-[#bfc2c7] rounded px-2 py-1.5 bg-white text-[10px] text-[#aaa] flex items-center justify-between">
-              <span>••••••••</span>
-              <Eye className="h-2.5 w-2.5 text-[#aaa]" />
-            </div>
-          </div>
-          <div className="bg-[#0070ba] rounded text-white text-[10px] font-semibold text-center py-1.5">
-            Authenticate
-          </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center p-8 bg-muted/20 text-center min-h-[220px]">
+          <Globe className="h-9 w-9 text-muted-foreground/40 mb-2" />
+          <p className="text-xs font-semibold text-foreground">Screenshot unavailable for this target</p>
+          <p className="text-[11px] text-muted-foreground mt-1 max-w-[200px]">
+            The headless browser audit extracted DOM telemetry without visual capture.
+          </p>
         </div>
-      </div>
-      <div className="bg-risk-critical-bg border-t border-risk-critical/30 px-3 py-2 flex items-center gap-2">
-        <AlertOctagon className="h-3.5 w-3.5 text-risk-critical-text shrink-0" />
-        <span className="text-[10px] font-semibold text-risk-critical-text">Form authentication inputs detected</span>
-      </div>
+      )}
     </div>
   )
 }
@@ -194,6 +201,14 @@ export function Investigate() {
   const findings = reportData?.results?.findings || []
   const evidence = reportData?.results?.evidence || {}
   const analyzers = evidence?.analyzers || {}
+  const screenshotData =
+    analyzers.visual?.data?.screenshot ||
+    analyzers.visual?.screenshot ||
+    analyzers.browser?.data?.screenshot ||
+    analyzers.browser?.screenshot ||
+    reportData?.results?.evidence?.screenshot ||
+    reportData?.screenshot ||
+    null
 
   const critCount = findings.filter((f: any) => f.severity === "critical").length || (reportData ? 0 : 4)
   const highCount = findings.filter((f: any) => f.severity === "high").length || (reportData ? 0 : 3)
@@ -400,8 +415,8 @@ export function Investigate() {
                   <Badge variant={riskVariant}>{rawRiskLevel} RISK</Badge>
                 </div>
                 <div className="flex flex-col gap-5 lg:flex-row">
-                  <div className="lg:w-72 shrink-0">
-                    <PhishingPageMockup domain={domain} />
+                  <div className="lg:w-80 shrink-0">
+                    <WebsiteScreenshot domain={domain} screenshotData={screenshotData} />
                   </div>
                   <div className="flex-1">
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Browser Observations</p>
