@@ -22,6 +22,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Dashboard /> },
       { path: "investigate", element: <Investigate /> },
+      { path: "investigate/:scanId", element: <Investigate /> },
       { path: "report", element: <ReportView /> },
       { path: "discovery", element: <DomainDiscovery /> },
       { path: "history", element: <RecentInvestigations /> },

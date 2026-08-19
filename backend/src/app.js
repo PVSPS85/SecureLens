@@ -44,7 +44,7 @@ const corsOptions = {
     }
 
     const isProduction = config.env === 'production';
-    const isAllowed = allowedOrigins.includes(origin) || (!isProduction && allowedOrigins.includes('*'));
+    const isAllowed = allowedOrigins.includes(origin) || (!isProduction && (allowedOrigins.includes('*') || origin.includes('localhost:') || origin.includes('127.0.0.1:')));
 
     if (isAllowed) {
       callback(null, true);

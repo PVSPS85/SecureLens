@@ -86,6 +86,10 @@ export function Dashboard() {
   const [analysisStep, setAnalysisStep] = useState(-1)
   const autoStarted = useRef(false)
 
+  const [scanError, setScanError] = useState<string | null>(null)
+  const activeScanId = useRef<string | null>(null)
+  const isScanDone = useRef(false)
+
   // Focus input when ?focus=1 is passed (from "New Scan" header button)
   useEffect(() => {
     if (searchParams.get("focus") === "1") {
@@ -107,22 +111,94 @@ export function Dashboard() {
     }
   }, [searchParams])
 
-  // Analysis step sequencer
-  // @BACKEND-TODO: Integrate with scanning engine API (e.g. WebSocket or SSE).
-  // - Instead of a fake timeout, listen to real-time events from the backend to progress the `analysisStep` state.
-  // - Once the final "Investigation complete" event is received, redirect to the `/investigate` route with the scan ID.
+  // Trigger backend scan when analysis starts
+  useEffect(() => {
+    if (!isAnalyzing || !analysisTarget) return
+    isScanDone.current = false
+    activeScanId.current = null
+    setScanError(null)
+
+    let isMounted = true
+
+    async function pollStatus(id: string) {
+      try {
+        const res = await fetch(`http://localhost:5001/api/v1/scan/${id}/status`)
+        const data = await res.json()
+        if (data?.data?.status === "completed") {
+          activeScanId.current = id
+          isScanDone.current = true
+        } else {
+          setTimeout(() => {
+            if (isMounted && !isScanDone.current) pollStatus(id)
+          }, 2000)
+        }
+      } catch (err) {
+        console.error("Status polling failed:", err)
+        activeScanId.current = id
+        isScanDone.current = true
+      }
+    }
+
+    async function executeScan() {
+      try {
+        const res = await fetch("http://localhost:5001/api/v1/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: analysisTarget }),
+        })
+        const result = await res.json()
+        const returnedId = result?.data?.scanId || result?.data?.scan?.id
+
+        if (returnedId) {
+          activeScanId.current = returnedId
+          if (result?.data?.status === "completed") {
+            isScanDone.current = true
+          } else {
+            pollStatus(returnedId)
+          }
+        } else {
+          isScanDone.current = true
+        }
+      } catch (err) {
+        console.error("Scan submission error:", err)
+        isScanDone.current = true
+      }
+    }
+
+    executeScan()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isAnalyzing, analysisTarget])
+
+  // Analysis step sequencer tied to backend progress
   useEffect(() => {
     if (!isAnalyzing) return
+
     if (analysisStep === -1) {
       const t = setTimeout(() => setAnalysisStep(0), 100)
       return () => clearTimeout(t)
     }
-    if (analysisStep >= ANALYSIS_STEPS.length) {
-      const t = setTimeout(() => navigate("/investigate"), 400)
-      return () => clearTimeout(t)
+
+    // If backend completed, quickly accelerate through remaining steps
+    if (analysisStep >= ANALYSIS_STEPS.length - 1) {
+      if (isScanDone.current) {
+        const dest = activeScanId.current ? `/investigate/${activeScanId.current}` : "/investigate"
+        const t = setTimeout(() => navigate(dest), 500)
+        return () => clearTimeout(t)
+      } else {
+        // Wait at the penultimate step until scan completes
+        return
+      }
     }
-    const delay = analysisStep === ANALYSIS_STEPS.length - 1 ? 700 : 190
-    const t = setTimeout(() => setAnalysisStep(s => s + 1), delay)
+
+    // Smoothly progress through analysis steps
+    const stepDelay = isScanDone.current ? 80 : 350
+    const t = setTimeout(() => {
+      setAnalysisStep(s => s + 1)
+    }, stepDelay)
+
     return () => clearTimeout(t)
   }, [isAnalyzing, analysisStep, navigate])
 
