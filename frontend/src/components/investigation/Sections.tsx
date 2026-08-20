@@ -6,6 +6,7 @@ import {
   X as XIcon,
   AlertTriangle,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
@@ -539,60 +540,90 @@ export function CookiesSection() {
 
 /* ------------------------------- PHISHING -------------------------------- */
 export function PhishingSection({ data, lookalikeData }: { data?: any; lookalikeData?: any }) {
-  const isImpersonating = lookalikeData?.potentialImpersonation
+  const isImpersonating = Boolean(lookalikeData?.potentialImpersonation)
+  const hasHomoglyphs = Boolean(lookalikeData?.containsHomoglyphs)
+  const isPhishingThreat = isImpersonating || hasHomoglyphs
+
   const brand = lookalikeData?.matchedBrands?.[0]?.brand || "None Detected"
   const similarity = lookalikeData?.matchedBrands?.[0]?.similarityScore 
     ? `${Math.round(lookalikeData.matchedBrands[0].similarityScore * 100)}%` 
-    : "0%"
+    : (hasHomoglyphs ? "95%" : "0%")
 
-  const indicators = [
-    lookalikeData?.containsHomoglyphs ? "Homoglyph / IDN character substitution detected" : "ASCII domain characters validated",
-    isImpersonating ? `Lookalike similarity to ${brand} brand detected` : "No known brand trademark collision",
-    "Domain registration age evaluated",
-    "Certificate authority reputation verified",
+  const sectionStatus: CheckStatus = isPhishingThreat ? "critical" : "pass"
+
+  const indicatorsList = [
+    {
+      label: hasHomoglyphs ? "Homoglyph / IDN character substitution detected" : "ASCII domain characters validated",
+      isThreat: hasHomoglyphs
+    },
+    {
+      label: isImpersonating ? `Lookalike similarity to ${brand} brand detected` : "No known brand trademark collision",
+      isThreat: isImpersonating
+    },
+    {
+      label: "Domain registration age evaluated",
+      isThreat: false
+    },
+    {
+      label: "Certificate authority reputation verified",
+      isThreat: false
+    }
   ]
 
   return (
     <EvidenceSection
       id="phishing"
       title="Brand Impersonation & Phishing"
-      status={isImpersonating ? "critical" : "pass"}
-      description={isImpersonating ? `Possible ${brand} impersonation · ${similarity} similarity` : "Brand trademark & lookalike audit complete"}
+      status={sectionStatus}
+      description={
+        isImpersonating 
+          ? `Possible ${brand} impersonation · ${similarity} similarity` 
+          : (hasHomoglyphs ? "Punycode / IDN character substitution detected — high spoofing risk" : "Brand trademark & lookalike audit complete")
+      }
       defaultOpen
     >
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="lg:w-64 shrink-0">
           <div className={cn(
             "rounded-xl border p-5 text-center",
-            isImpersonating 
+            isPhishingThreat 
               ? "border-risk-critical-bg bg-risk-critical-bg/40 text-risk-critical-text" 
               : "border-risk-low-bg bg-risk-low-bg/40 text-risk-low-text"
           )}>
-            <ShieldAlert className="mx-auto h-8 w-8" />
+            {isPhishingThreat ? (
+              <ShieldAlert className="mx-auto h-8 w-8 text-risk-critical-text" />
+            ) : (
+              <ShieldCheck className="mx-auto h-8 w-8 text-risk-low-text" />
+            )}
             <p className="mt-2 text-sm font-semibold">
-              {isImpersonating ? `Target: ${brand}` : "Clean Brand Profile"}
+              {isImpersonating ? `Target: ${brand}` : (hasHomoglyphs ? "IDN Homoglyph Spoof" : "Clean Brand Profile")}
             </p>
-            <p className="mt-3 text-4xl font-bold">{isImpersonating ? similarity : "0%"}</p>
+            <p className="mt-3 text-4xl font-bold">{similarity}</p>
             <p className="text-xs uppercase tracking-wider opacity-80">
-              Visual Similarity
+              {hasHomoglyphs ? "Homoglyph / Visual Similarity" : "Visual Similarity"}
             </p>
           </div>
         </div>
         <div className="flex-1">
           <SectionSubhead>Evaluation Indicators</SectionSubhead>
           <ul className="space-y-2">
-            {indicators.map((ind) => (
+            {indicatorsList.map((item, idx) => (
               <li
-                key={ind}
-                className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground"
+                key={idx}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm",
+                  item.isThreat
+                    ? "border-risk-critical-bg/80 bg-risk-critical-bg/20 text-risk-critical-text"
+                    : "border-border bg-card text-foreground"
+                )}
               >
                 <span className={cn(
                   "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                  isImpersonating ? "bg-risk-critical-bg text-risk-critical-text" : "bg-risk-low-bg text-risk-low-text"
+                  item.isThreat ? "bg-risk-critical-bg text-risk-critical-text" : "bg-risk-low-bg text-risk-low-text"
                 )}>
-                  <Check className="h-3 w-3" />
+                  {item.isThreat ? <AlertTriangle className="h-3 w-3" /> : <Check className="h-3 w-3" />}
                 </span>
-                {ind}
+                {item.label}
               </li>
             ))}
           </ul>
