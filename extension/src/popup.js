@@ -87,9 +87,20 @@ document.addEventListener("DOMContentLoaded", () => {
           const li = document.createElement("li");
           li.className = "signal-item";
           
-          // Render with red bullet indicator
+          // Render bullet indicator matching severity level
           const dot = document.createElement("span");
           dot.className = "status-dot";
+          const sev = (data.severity || "SAFE").toUpperCase();
+          if (sev === "SAFE") {
+            dot.style.backgroundColor = "#10b981";
+            dot.style.boxShadow = "0 0 6px rgba(16, 185, 129, 0.4)";
+          } else if (sev === "WARNING") {
+            dot.style.backgroundColor = "#f59e0b";
+            dot.style.boxShadow = "0 0 6px rgba(245, 158, 11, 0.4)";
+          } else {
+            dot.style.backgroundColor = "#ef4444";
+            dot.style.boxShadow = "0 0 6px rgba(239, 68, 68, 0.4)";
+          }
           
           const text = document.createElement("span");
           text.className = "signal-text";
