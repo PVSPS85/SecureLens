@@ -90,14 +90,14 @@ class RulebookEngine {
     const analyzers = evidencePayload.analyzers || {};
 
     // ── Extract each analyzer's .data payload (guard against missing/failed) ──
-    const domainData  = analyzers.domain?.data                   || {};
-    const lookData    = analyzers.lookalike?.data                || {};
-    const tlsData     = analyzers.tls?.data                     || {};
-    const whoisData   = analyzers.whois?.data                   || {};
-    const httpData    = analyzers.http?.data                     || {};
-    const redirData   = analyzers.redirects?.data               || {};
-    const browserData = analyzers.browser?.data                 || {};
-    const tiData      = analyzers['threat-intelligence']?.data  || {};
+    const domainData = analyzers.domain?.data || {};
+    const lookData = analyzers.lookalike?.data || {};
+    const tlsData = analyzers.tls?.data || {};
+    const whoisData = analyzers.whois?.data || {};
+    const httpData = analyzers.http?.data || {};
+    const redirData = analyzers.redirects?.data || {};
+    const browserData = analyzers.browser?.data || {};
+    const tiData = analyzers['threat-intelligence']?.data || {};
 
     // ── Derived convenience flags ─────────────────────────────────────────────
 
@@ -115,17 +115,17 @@ class RulebookEngine {
 
     // TLS: "authorized" = true means a valid, CA-signed, non-expired certificate.
     // There is NO `.valid` key — the analyzer uses `.authorized`.
-    const tlsAuthorized  = Boolean(tlsData.authorized);   // true = good TLS
-    const tlsExpired     = Boolean(tlsData.isExpired);
-    const tlsSelfSigned  = Boolean(tlsData.isSelfSigned);
+    const tlsAuthorized = Boolean(tlsData.authorized);   // true = good TLS
+    const tlsExpired = Boolean(tlsData.isExpired);
+    const tlsSelfSigned = Boolean(tlsData.isSelfSigned);
 
     // HTTP security headers — stored as pre-computed booleans under securityHeaders
     const secHeaders = httpData.securityHeaders || {};
-    const hasHSTS    = Boolean(secHeaders.hasHSTS);
-    const hasCSP     = Boolean(secHeaders.hasCSP);
+    const hasHSTS = Boolean(secHeaders.hasHSTS);
+    const hasCSP = Boolean(secHeaders.hasCSP);
 
     // Lookalike / homoglyph
-    const containsHomoglyphs     = Boolean(lookData.containsHomoglyphs);
+    const containsHomoglyphs = Boolean(lookData.containsHomoglyphs);
     const potentialImpersonation = Boolean(lookData.potentialImpersonation);
 
     // Redirect chain depth — the field is `totalHops` (chain.length - 1)
@@ -207,10 +207,10 @@ class RulebookEngine {
     // 3b. Self-signed, expired, or invalid/mismatched TLS → certificate is untrustworthy
     if (tlsSelfSigned || tlsExpired || (tlsData.authorized === false && (tlsData.isSelfSigned !== false || tlsData.authorizationError))) {
       score += 60;
-      const reason = tlsExpired 
-        ? 'expired' 
-        : tlsSelfSigned 
-          ? 'self-signed' 
+      const reason = tlsExpired
+        ? 'expired'
+        : tlsSelfSigned
+          ? 'self-signed'
           : (tlsData.authorizationError || 'untrusted / hostname mismatch');
       detectedRisks.push(
         `COMPOUND: TLS certificate is ${reason} — data in transit may be intercepted or the identity is unverifiable`
@@ -233,7 +233,7 @@ class RulebookEngine {
     //     Informational deduction (+5 per missing header, max +10)
     const missingHeaders = [];
     if (!hasHSTS) missingHeaders.push('HSTS');
-    if (!hasCSP)  missingHeaders.push('CSP');
+    if (!hasCSP) missingHeaders.push('CSP');
     if (missingHeaders.length > 0) {
       score += missingHeaders.length * 5;
       detectedRisks.push(`INFORMATIONAL: Missing security header(s): ${missingHeaders.join(', ')}`);
