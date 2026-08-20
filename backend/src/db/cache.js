@@ -82,7 +82,7 @@ export const lookalikeCache = new Map([
 ]);
 
 // ─── Helper: Get all lookalike alerts sorted by detected_at desc ──────────────
-export function getCachedLookalikes(limit = 50, filters = {}) {
+export function getCachedLookalikes(limit = 500, filters = {}) {
   let alerts = Array.from(lookalikeCache.values());
 
   if (filters.risk) {
@@ -97,7 +97,7 @@ export function getCachedLookalikes(limit = 50, filters = {}) {
 }
 
 // ─── Helper: Get all scans sorted by created_at desc ─────────────────────────
-export function getCachedScans(limit = 50) {
+export function getCachedScans(limit = 100) {
   const scans = Array.from(scanCache.values());
   scans.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   return scans.slice(0, limit);
@@ -108,6 +108,12 @@ export function upsertLookalikeInCache(alertData) {
   const key = alertData.id || alertData.candidate_domain || randomUUID();
   const existing = lookalikeCache.get(key) || {};
   lookalikeCache.set(key, { ...existing, ...alertData, id: key });
+
+  // Rolling buffer: allow up to 500 real-time monitored threats
+  if (lookalikeCache.size > 500) {
+    const oldestKey = lookalikeCache.keys().next().value;
+    if (oldestKey) lookalikeCache.delete(oldestKey);
+  }
 }
 
 // ─── Helper: Compute dashboard metrics from cache ────────────────────────────

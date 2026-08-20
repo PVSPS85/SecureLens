@@ -6,9 +6,9 @@ import { lookalikeCache, getCachedLookalikes, upsertLookalikeInCache } from '../
  * Fetches lookalike domain alerts. ALWAYS serves from cache (instant).
  * Cache is pre-populated with known threats and updated on every new scan.
  */
-export const getLookalikeAlerts = async (filters = {}, page = 1, limit = 10) => {
+export const getLookalikeAlerts = async (filters = {}, page = 1, limit = 50) => {
   // ✅ Serve from cache — zero-latency, always available
-  const allAlerts = getCachedLookalikes(250, filters);
+  const allAlerts = getCachedLookalikes(500, filters);
   const offset = (page - 1) * limit;
   const paginated = allAlerts.slice(offset, offset + limit);
 

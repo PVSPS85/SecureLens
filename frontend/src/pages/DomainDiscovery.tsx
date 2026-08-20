@@ -75,9 +75,8 @@ export function DomainDiscovery() {
     if (!silent) setIsLoading(true)
     setHasError(false)
     try {
-      // Query up to 200 records in a single request instead of 4 parallel ones
-      // This is much gentler on rate limits and network overhead
-      const res = await fetch("http://localhost:5001/api/v1/lookalikes?limit=200&page=1")
+      // Query up to 500 records in a single fast request
+      const res = await fetch("http://localhost:5001/api/v1/lookalikes?limit=500&page=1")
       
       let combined: LookalikeAlert[] = []
       
