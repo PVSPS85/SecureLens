@@ -75,24 +75,20 @@ export function DomainDiscovery() {
     if (!silent) setIsLoading(true)
     setHasError(false)
     try {
-      // Query up to 200 records across pages dynamically
-      const [p1, p2, p3, p4] = await Promise.allSettled([
-        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=1").then(r => r.ok ? r.json() : { data: [] }),
-        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=2").then(r => r.ok ? r.json() : { data: [] }),
-        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=3").then(r => r.ok ? r.json() : { data: [] }),
-        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=4").then(r => r.ok ? r.json() : { data: [] })
-      ])
-
-      const d1 = p1.status === "fulfilled" && Array.isArray(p1.value?.data) ? p1.value.data : []
-      const d2 = p2.status === "fulfilled" && Array.isArray(p2.value?.data) ? p2.value.data : []
-      const d3 = p3.status === "fulfilled" && Array.isArray(p3.value?.data) ? p3.value.data : []
-      const d4 = p4.status === "fulfilled" && Array.isArray(p4.value?.data) ? p4.value.data : []
-      const combined = [...d1, ...d2, ...d3, ...d4]
-
-      if (combined.length === 0 && (p1.status === "rejected" || p2.status === "rejected")) {
-        setHasError(true)
-      } else {
+      // Query up to 200 records in a single request instead of 4 parallel ones
+      // This is much gentler on rate limits and network overhead
+      const res = await fetch("http://localhost:5001/api/v1/lookalikes?limit=200&page=1")
+      
+      let combined: LookalikeAlert[] = []
+      
+      if (res.ok) {
         setHasError(false)
+        const json = await res.json()
+        if (Array.isArray(json?.data)) {
+          combined = json.data
+        }
+      } else {
+        setHasError(true)
       }
 
       // Deduplicate by id
@@ -116,10 +112,11 @@ export function DomainDiscovery() {
   useEffect(() => {
     loadAlerts()
     
-    // Set up a 5-second poll interval for real-time automatic synchronization
+    // Set up a 10-second poll interval for real-time automatic synchronization
+    // so judges can visibly see the feed updating during the demonstration.
     const interval = setInterval(() => {
       loadAlerts(true)
-    }, 5000)
+    }, 10000)
 
     return () => clearInterval(interval)
   }, [loadAlerts])

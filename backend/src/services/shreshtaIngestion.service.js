@@ -266,8 +266,8 @@ export function startShreshtaDaemon() {
     processNextCandidate();
   });
 
-  // Process a real domain candidate every 8 seconds for live dashboard streaming
-  daemonIntervalId = setInterval(processNextCandidate, 8000);
+  // Process a real domain candidate every 15 seconds for live dashboard streaming
+  daemonIntervalId = setInterval(processNextCandidate, 15000);
 
   // Periodically refresh the entire Shreshta Labs feed every 6 hours
   setInterval(refreshCandidateQueue, 6 * 60 * 60 * 1000);
