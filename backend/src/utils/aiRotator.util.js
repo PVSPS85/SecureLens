@@ -23,7 +23,7 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
   // Loop 1: Iterate through the Gemini API keys
   for (let i = 0; i < geminiKeys.length; i++) {
     const key = geminiKeys[i];
-    const geminiModels = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    const geminiModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
     for (const modelName of geminiModels) {
       try {
         logger.info(`[AIRotator] Attempting generation using Gemini model "${modelName}" with key index ${i}`);
@@ -49,7 +49,7 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
   // Loop 2: Fallback to Groq API keys if Gemini keys failed or are empty
   if (groqKeys.length > 0) {
     logger.info('[AIRotator] Falling back to Groq API keys...');
-    const groqModels = ['groq/compound-mini', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+    const groqModels = ['llama-3.3-70b-versatile', 'llama3-70b-8192', 'mixtral-8x7b-32768'];
     
     for (let i = 0; i < groqKeys.length; i++) {
       const key = groqKeys[i];
