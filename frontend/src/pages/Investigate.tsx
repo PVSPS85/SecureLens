@@ -129,14 +129,13 @@ export function Investigate() {
   const navigate = useNavigate()
   const { scanId: routeScanId } = useParams()
   const [searchParams] = useSearchParams()
+  const targetParam = searchParams.get("target") || searchParams.get("domain") || searchParams.get("url")
   const activeId = routeScanId || searchParams.get("scanId") || searchParams.get("id")
 
   const [reportData, setReportData] = useState<any>(null)
   const [aiData, setAiData] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState<boolean>(Boolean(activeId))
+  const [isLoading, setIsLoading] = useState<boolean>(Boolean(activeId || targetParam))
   const [exportState, setExportState] = useState<"idle" | "preparing" | "ready">("idle")
-
-  const targetParam = searchParams.get("target") || searchParams.get("domain") || searchParams.get("url")
 
   useEffect(() => {
     if (!activeId && !targetParam) {

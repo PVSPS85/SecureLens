@@ -205,7 +205,7 @@ class RulebookEngine {
     }
 
     // 3b. Self-signed, expired, or invalid/mismatched TLS → certificate is untrustworthy
-    if (tlsSelfSigned || tlsExpired || (!tlsAuthorized && tlsData.authorized !== undefined)) {
+    if (tlsSelfSigned || tlsExpired || (tlsData.authorized === false && (tlsData.isSelfSigned !== false || tlsData.authorizationError))) {
       score += 60;
       const reason = tlsExpired 
         ? 'expired' 
