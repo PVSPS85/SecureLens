@@ -1,5 +1,9 @@
+import { randomUUID } from 'crypto';
 import supabase from '../client.js';
 import logger from '../../utils/logger.js';
+
+// In-memory fallback scan store
+const memoryScans = new Map();
 
 /**
  * Inserts a new scan log tracking record.
@@ -8,6 +12,21 @@ import logger from '../../utils/logger.js';
  * @returns {Promise<object>} The inserted scan record row.
  */
 export const insertScan = async (scanData) => {
+  const generatedId = randomUUID();
+  const fallbackRecord = {
+    id: generatedId,
+    user_id: scanData.userId || null,
+    target: scanData.target,
+    normalized_target: scanData.normalizedTarget,
+    target_type: scanData.targetType,
+    source: scanData.source,
+    status: scanData.status || 'queued',
+    risk_level: scanData.riskLevel || 'unknown',
+    risk_score: scanData.riskScore || 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
   try {
     logger.info(`[Database Scans] Inserting scan record for target: "${scanData.target}"`);
 
@@ -26,11 +45,18 @@ export const insertScan = async (scanData) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.warn(`[Database Scans] Supabase insert failed (${error.message}). Using in-memory scan store.`);
+      memoryScans.set(fallbackRecord.id, fallbackRecord);
+      return fallbackRecord;
+    }
+    
+    memoryScans.set(data.id, data);
     return data;
   } catch (error) {
-    logger.error(`[Database Scans] Error in insertScan: ${error.message}`);
-    throw new Error(`Database error: Failed to initialize scan record. Details: ${error.message}`);
+    logger.warn(`[Database Scans] Exception in insertScan (${error.message}). Using in-memory scan store.`);
+    memoryScans.set(fallbackRecord.id, fallbackRecord);
+    return fallbackRecord;
   }
 };
 
@@ -44,6 +70,13 @@ export const insertScan = async (scanData) => {
  * @returns {Promise<object>} The updated scan record row.
  */
 export const updateScanStatus = async (scanId, status, riskScore, riskLevel) => {
+  const mem = memoryScans.get(scanId) || { id: scanId };
+  mem.status = status;
+  mem.risk_score = riskScore;
+  mem.risk_level = riskLevel;
+  mem.updated_at = new Date().toISOString();
+  memoryScans.set(scanId, mem);
+
   try {
     logger.info(`[Database Scans] Updating scan status for ID: "${scanId}" to "${status}"`);
 
@@ -59,11 +92,12 @@ export const updateScanStatus = async (scanId, status, riskScore, riskLevel) => 
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      return mem;
+    }
     return data;
   } catch (error) {
-    logger.error(`[Database Scans] Error in updateScanStatus: ${error.message}`);
-    throw new Error(`Database error: Failed to update scan status. Details: ${error.message}`);
+    return mem;
   }
 };
 
@@ -83,11 +117,12 @@ export const getScanById = async (scanId) => {
       .eq('id', scanId)
       .maybeSingle();
 
-    if (error) throw error;
+    if (error || !data) {
+      return memoryScans.get(scanId) || null;
+    }
     return data;
   } catch (error) {
-    logger.error(`[Database Scans] Error in getScanById: ${error.message}`);
-    throw new Error(`Database error: Failed to retrieve scan record. Details: ${error.message}`);
+    return memoryScans.get(scanId) || null;
   }
 };
 
@@ -119,7 +154,18 @@ export const getUserScanHistory = async (userId, options = {}) => {
 
     const { data, error, count } = await query;
 
-    if (error) throw error;
+    if (error) {
+      const allMem = Array.from(memoryScans.values());
+      return {
+        data: allMem.slice(offset, offset + limit),
+        pagination: {
+          total: allMem.length,
+          page,
+          limit,
+          totalPages: Math.ceil(allMem.length / limit) || 1
+        }
+      };
+    }
 
     return {
       data: data || [],
@@ -131,8 +177,16 @@ export const getUserScanHistory = async (userId, options = {}) => {
       }
     };
   } catch (error) {
-    logger.error(`[Database Scans] Error in getUserScanHistory: ${error.message}`);
-    throw new Error(`Database error: Failed to retrieve user scan history. Details: ${error.message}`);
+    const allMem = Array.from(memoryScans.values());
+    return {
+      data: allMem.slice(0, 10),
+      pagination: {
+        total: allMem.length,
+        page: 1,
+        limit: 10,
+        totalPages: 1
+      }
+    };
   }
 };
 

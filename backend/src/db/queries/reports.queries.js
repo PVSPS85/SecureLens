@@ -1,6 +1,9 @@
 import supabase from '../client.js';
 import logger from '../../utils/logger.js';
 
+// In-memory fallback report store
+const memoryReports = new Map();
+
 /**
  * Inserts or updates the final authoritative scan report.
  *
@@ -8,6 +11,19 @@ import logger from '../../utils/logger.js';
  * @returns {Promise<object>} The inserted report record row.
  */
 export const insertReport = async (reportData) => {
+  const fallbackReport = {
+    scan_id: reportData.scanId,
+    summary: reportData.summary,
+    findings: reportData.findings || [],
+    infrastructure: reportData.infrastructure || {},
+    recommendation: reportData.recommendation,
+    timeline: reportData.timeline || [],
+    rulebook_version: reportData.rulebookVersion || '1.0.0',
+    created_at: new Date().toISOString()
+  };
+
+  memoryReports.set(reportData.scanId, fallbackReport);
+
   try {
     logger.info(`[Database Reports] Saving report findings for scan ID: "${reportData.scanId}"`);
 
@@ -28,11 +44,15 @@ export const insertReport = async (reportData) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.warn(`[Database Reports] Supabase report upsert failed (${error.message}). Using in-memory report store.`);
+      return fallbackReport;
+    }
+    memoryReports.set(reportData.scanId, data);
     return data;
   } catch (error) {
-    logger.error(`[Database Reports] Error in insertReport: ${error.message}`);
-    throw new Error(`Database error: Failed to persist forensic report. Details: ${error.message}`);
+    logger.warn(`[Database Reports] Exception in insertReport (${error.message}). Using in-memory report store.`);
+    return fallbackReport;
   }
 };
 
@@ -52,11 +72,12 @@ export const getReportByScanId = async (scanId) => {
       .eq('scan_id', scanId)
       .maybeSingle();
 
-    if (error) throw error;
+    if (error || !data) {
+      return memoryReports.get(scanId) || null;
+    }
     return data;
   } catch (error) {
-    logger.error(`[Database Reports] Error in getReportByScanId: ${error.message}`);
-    throw new Error(`Database error: Failed to retrieve scan report. Details: ${error.message}`);
+    return memoryReports.get(scanId) || null;
   }
 };
 
@@ -69,6 +90,10 @@ export const getReportByScanId = async (scanId) => {
  * @returns {Promise<object>} Updated or inserted report row.
  */
 export const updateReportSummary = async (scanId, summaryText) => {
+  const mem = memoryReports.get(scanId) || { scan_id: scanId };
+  mem.summary = summaryText;
+  memoryReports.set(scanId, mem);
+
   try {
     logger.info(`[Database Reports] Updating summary for scan ID: "${scanId}"`);
 
@@ -83,11 +108,10 @@ export const updateReportSummary = async (scanId, summaryText) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) return mem;
     return data;
   } catch (error) {
-    logger.error(`[Database Reports] Error in updateReportSummary: ${error.message}`);
-    throw new Error(`Database error: Failed to update report summary. Details: ${error.message}`);
+    return mem;
   }
 };
 

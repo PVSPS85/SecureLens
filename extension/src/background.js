@@ -46,10 +46,13 @@ async function performScan(url) {
     clearTimeout(timeoutId);
 
     if (response.ok) {
-      const data = await response.json();
-      const score = data.risk?.score !== undefined ? data.risk.score : (data.score !== undefined ? data.score : 0);
-      const severity = data.risk?.level || data.severity || (score > 70 ? "CRITICAL" : score >= 30 ? "MEDIUM" : "LOW");
-      const findings = data.risk?.findings || [];
+      const json = await response.json();
+      const data = json.data || json;
+      const score = data.riskScore !== undefined 
+        ? data.riskScore 
+        : (data.risk?.score !== undefined ? data.risk.score : (data.score !== undefined ? data.score : 0));
+      const severity = (data.riskLevel || data.risk?.level || data.severity || (score > 70 ? "CRITICAL" : score >= 30 ? "WARNING" : "SAFE")).toUpperCase();
+      const findings = data.findings || data.risk?.findings || [];
       const signals = findings.length > 0 
         ? findings.map(f => f.vulnerability || f.description) 
         : (data.signals || ["Domain evaluated under Paranoia Rulebook."]);
@@ -58,8 +61,8 @@ async function performScan(url) {
         score,
         severity,
         signals,
-        scanId: data.scanId || "",
-        description: data.summary?.recommendation || `Target evaluated with score ${score}/100.`
+        scanId: data.scanId || data.scan?.id || "",
+        description: data.summary?.recommendation || data.summary || (data.recommendations?.[0]) || `Target evaluated with score ${score}/100.`
       };
     } else {
       console.warn(`Backend responded with status ${response.status}. Using local fallback.`);
