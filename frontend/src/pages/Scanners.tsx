@@ -488,7 +488,7 @@ function PhoneScannerView() {
           <div className="flex gap-2 max-w-md">
             <input
               type="text"
-              placeholder="+91 8105634383 or +1 (555) 019-2834"
+              placeholder="+1 (555) 019-2834 or +91 98765 43210"
               value={phone}
               onChange={e => setPhone(e.target.value)}
               className="flex-1 px-4 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-ring font-mono"
