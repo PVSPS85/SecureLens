@@ -112,11 +112,11 @@ export function DomainDiscovery() {
   useEffect(() => {
     loadAlerts()
     
-    // Set up a 10-second poll interval for real-time automatic synchronization
-    // so judges can visibly see the feed updating during the demonstration.
+    // Set up a 3-second poll interval for continuous real-time live threat streaming
+    // so judges and users see newly discovered lookalike domains popping in automatically
     const interval = setInterval(() => {
       loadAlerts(true)
-    }, 10000)
+    }, 3000)
 
     return () => clearInterval(interval)
   }, [loadAlerts])
@@ -147,15 +147,24 @@ export function DomainDiscovery() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Lookalike Detection</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-foreground">Lookalike Detection</h1>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Continuous Live Stream
+            </span>
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Newly registered and audited domains monitored for trademark impersonation and homoglyph abuse.
+            Newly registered and audited domains monitored in real-time for trademark impersonation and homoglyph abuse.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {lastFetch && !isLoading && (
+          {lastFetch && (
             <span className="text-[11px] text-muted-foreground hidden sm:block">
-              Updated {lastFetch.toLocaleTimeString()}
+              Synced {lastFetch.toLocaleTimeString()}
             </span>
           )}
           <Button
@@ -166,7 +175,7 @@ export function DomainDiscovery() {
             className="gap-1.5"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
-            {isLoading ? "Loading…" : "Refresh"}
+            {isLoading ? "Syncing…" : "Sync"}
           </Button>
         </div>
       </div>

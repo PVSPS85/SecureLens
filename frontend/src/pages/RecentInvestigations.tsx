@@ -56,8 +56,22 @@ export function RecentInvestigations() {
     }
 
     loadScans()
+
+    // Real-time synchronization interval
+    const interval = setInterval(() => {
+      fetch("http://localhost:5001/api/v1/scans/recent?limit=50")
+        .then(res => res.ok ? res.json() : null)
+        .then(json => {
+          if (isMounted && Array.isArray(json?.data)) {
+            setScans(json.data)
+          }
+        })
+        .catch(() => {})
+    }, 3000)
+
     return () => {
       isMounted = false
+      clearInterval(interval)
     }
   }, [])
 

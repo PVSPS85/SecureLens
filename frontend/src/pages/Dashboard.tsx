@@ -151,10 +151,18 @@ export function Dashboard() {
 
     fetchDashboardData()
 
+    // Poll live dashboard telemetry every 3 seconds for continuous updates
+    const interval = setInterval(() => {
+      if (!isAnalyzing) {
+        fetchDashboardData()
+      }
+    }, 3000)
+
     return () => {
       isMounted = false
+      clearInterval(interval)
     }
-  }, [])
+  }, [isAnalyzing])
 
   // Auto-start scan when ?target= is passed
   useEffect(() => {
