@@ -145,6 +145,8 @@ export function Investigate() {
     }
 
     let isMounted = true
+    setReportData(null)
+    setAiData(null)
 
     async function loadReport() {
       setIsLoading(true)
@@ -165,6 +167,9 @@ export function Investigate() {
             if (startRes.ok) {
               const startJson = await startRes.json()
               loadedScanId = startJson.scanId || startJson.data?.scanId || loadedScanId
+              if (loadedScanId && isMounted) {
+                navigate(`/investigate/${loadedScanId}`, { replace: true })
+              }
             }
           }
         }
@@ -195,6 +200,7 @@ export function Investigate() {
                     if (isMounted && retryJson?.data) {
                       setReportData(retryJson.data)
                       loadedScanId = newId
+                      navigate(`/investigate/${newId}`, { replace: true })
                     }
                   }
                 }

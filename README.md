@@ -1,7 +1,20 @@
 # 🛡️ SecureLens — AI-Powered Phishing & Real-World Domain Spoofing Detection
 
-> **Smart India Hackathon (SIH) Cybersecurity Platform**  
-> Comprehensive, sub-second threat analysis, lookalike domain intelligence, real-world Newly Registered Domain (NRD) ingestion, and active browser protection.
+> **Smart India Hackathon (SIH) Cybersecurity Platform — Problem Statement: SIH260072**  
+> Sub-second threat analysis, real-world Newly Registered Domain (NRD) live ingestion, brand lookalike intelligence, and active browser protection.
+
+---
+
+## 📖 Table of Contents
+- [Architecture Overview](#-architecture-overview)
+- [Directory Hierarchy](#-directory-hierarchy)
+- [Quick Start Guide](#-quick-start-guide)
+  - [Option 1: 1-Click Docker Compose (Recommended)](#option-1-1-click-docker-compose-recommended)
+  - [Option 2: Local Node.js Development](#option-2-local-nodejs-development)
+- [Chrome Extension Setup](#-chrome-extension-setup)
+- [Specialized Scanners Guide](#-specialized-scanners-guide)
+- [REST API Contract](#-rest-api-contract)
+- [Environment Configuration](#-environment-configuration)
 
 ---
 
@@ -9,7 +22,7 @@
 
 SecureLens operates on a zero-trust, multi-layered cybersecurity pipeline:
 
-```
+```text
 [ Real-World Shreshta Labs Feed / User Target / Chrome Extension ]
                                │
                                ▼
@@ -40,56 +53,56 @@ SecureLens operates on a zero-trust, multi-layered cybersecurity pipeline:
                                ▼
             ┌──────────────────────────────────────┐
             │         SecureAI Intelligence        │
-            │  (Gemini 3.6 Flash / Groq Compound)  │
+            │  (Gemini 2.0 Flash & Groq Rotation)  │
             └──────────────────┬───────────────────┘
                                │
                                ▼
       ┌────────────────────────┴────────────────────────┐
       ▼                                                 ▼
-[ Forensic Web Dashboard (React + Vite) ]   [ Chrome Extension (Manifest V3) ]
+[ Forensic Web Dashboard (React 18 + Vite) ]   [ Chrome Extension (Manifest V3) ]
 ```
 
 ---
 
-## 📂 Project Directory Structure
+## 📂 Directory Hierarchy
 
 ```text
 SecureLens/
-├── backend/                  # Node.js / Express REST API Server
+├── backend/                  # Express.js REST API Server
 │   ├── src/
-│   │   ├── controllers/      # Scan, Lookalike, Scanners, and SecureAI controllers
-│   │   ├── db/               # Supabase PostgreSQL queries and client
-│   │   ├── services/         # ScoringEngine, IngestionDaemon, and SecurityEngine interface
+│   │   ├── controllers/      # Scan, Lookalike, Scanner, and SecureAI controllers
+│   │   ├── db/               # Supabase PostgreSQL queries and client setup
+│   │   ├── services/         # SecurityEngine interface & Shreshta NRD daemon
 │   │   ├── utils/            # Normalizer, SSRF Guard, AI Rotator, Logger
 │   │   └── index.js          # API Server entry point
-│   ├── scripts/              # Ingestion, cache, and migration scripts
+│   ├── scripts/              # Database maintenance & wipe utility scripts
 │   ├── .env.example          # Environment variables template
-│   └── Dockerfile            # Backend production container configuration
+│   └── Dockerfile            # Multi-stage production backend container
 │
-├── frontend/                 # React 18 + Vite + TailwindCSS Web Application
+├── frontend/                 # React 18 + Vite + TailwindCSS Web Dashboard
 │   ├── src/
-│   │   ├── components/       # UI cards, navigation, widgets, and AI chat assistant
-│   │   ├── pages/            # Dashboard, Investigate, Lookalikes, Scanners, Reports, Extension
+│   │   ├── components/       # Layouts, UI primitives, and AI Chat Assistant
+│   │   ├── pages/            # Dashboard, Investigate, Lookalikes, Scanners, Reports
 │   │   └── routes.tsx        # Application router
 │   └── Dockerfile            # Frontend container configuration
 │
-├── securityEngine/           # Core forensic analyzers & rulebook engine
-│   ├── analyzers/            # Domain, Lookalike, DNS, TLS, WHOIS, HTTP, Redirects, Visual
-│   ├── rulebook/             # Paranoia Rulebook scoring algorithms
+├── securityEngine/           # Multi-vector forensic analyzers & rulebook engine
+│   ├── analyzers/            # Domain, DNS, TLS, WHOIS, HTTP, Redirects, Lookalikes
+│   ├── rulebook/             # Paranoia Rulebook multi-signal scoring algorithms
 │   └── index.js              # Security engine runner
 │
-├── extension/                # Chrome Browser Extension (Manifest V3)
+├── extension/                # Chrome Extension (Manifest V3)
 │   ├── src/
-│   │   ├── background.js     # Background service worker with sub-200ms quick scans
-│   │   └── popup.js          # Interactive popup interface
+│   │   ├── background.js     # Service worker with sub-200ms quick-scans
+│   │   └── popup.js          # Extension popup UI logic
 │   ├── popup.html            # Extension popup layout
 │   └── manifest.json         # Chrome extension manifest
 │
-├── database/                 # Supabase PostgreSQL database schema & migrations
+├── database/                 # Supabase PostgreSQL schema & migrations
 │   └── migrations/           # 001_initial_schema.sql
 │
-├── docker-compose.yml        # 1-click Docker orchestration
-├── package.json              # Workspace scripts
+├── docker-compose.yml        # 1-click orchestration
+├── package.json              # Workspace convenience scripts
 └── README.md                 # Project documentation
 ```
 
@@ -97,9 +110,9 @@ SecureLens/
 
 ## 🚀 Quick Start Guide
 
-### Option 1: Run with Docker Compose (Recommended)
+### Option 1: 1-Click Docker Compose (Recommended)
 
-Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is installed and running.
+Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is running.
 
 1. **Clone the repository:**
    ```bash
@@ -111,20 +124,19 @@ Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is i
    ```bash
    cp backend/.env.example backend/.env
    ```
-   *(Ensure your Supabase keys, Gemini API key, and Groq API key are populated in `backend/.env`)*
 
-3. **Start all services:**
+3. **Launch all services in 1 command:**
    ```bash
    docker compose up --build
    ```
 
-4. **Access the applications:**
+4. **Access the platform:**
    - 🌐 **Web Dashboard:** [http://localhost:5173](http://localhost:5173)
-   - ⚡ **Backend API:** [http://localhost:5001](http://localhost:5001)
+   - ⚡ **Backend REST API:** [http://localhost:5001](http://localhost:5001)
 
 ---
 
-### Option 2: Run Locally with Node.js
+### Option 2: Local Node.js Development
 
 **Prerequisites:** Node.js v18+ and npm installed.
 
@@ -133,18 +145,18 @@ Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is i
    npm run install:all
    ```
 
-2. **Configure environment variables:**
+2. **Configure backend environment variables:**
    ```bash
    cp backend/.env.example backend/.env
    ```
 
-3. **Run the Backend Server (Terminal 1):**
+3. **Start the Backend API Server (Terminal 1):**
    ```bash
    cd backend
    npm run dev
    ```
 
-4. **Run the Frontend Dashboard (Terminal 2):**
+4. **Start the Frontend Dashboard (Terminal 2):**
    ```bash
    cd frontend
    npm run dev
@@ -154,51 +166,53 @@ Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is i
 
 ---
 
-## 🧩 How to Install the Chrome Extension
+## 🧩 Chrome Extension Setup
 
-1. Open Google Chrome and navigate to:
-   ```text
-   chrome://extensions/
-   ```
-2. Enable **Developer mode** in the top-right corner.
+1. Open Google Chrome and go to `chrome://extensions/`.
+2. Toggle **Developer mode** ON in the top-right corner.
 3. Click **"Load unpacked"** in the top-left corner.
-4. Select the `extension/` folder inside this repository:
+4. Select the `extension/` directory from this repository:
    ```text
    /path/to/SecureLens/extension
    ```
-5. Click **Select**. SecureLens is now active!
-6. Visit any website (e.g., `github.com` or `youtube.com`) and click the **SecureLens** icon on your toolbar to run an instant safety audit.
+5. Click the **SecureLens** icon on your Chrome toolbar to test sub-200ms quick scans on any live website!
 
 ---
 
-## 🔍 Core Features & Capabilities
-
-- 🔎 **Real-World Shreshta Labs Feed Ingestion:** Automatically ingests newly registered domains (8,400+ domains) and flags active homoglyphs and spoofing campaigns.
-- ⚡ **Sub-200ms Quick Scans:** High-throughput network-level threat evaluation designed for real-time browser protection.
-- 🎯 **Lookalike & Homoglyph Detection:** SLD extraction, Brand substring containment, Levenshtein distance, and Punycode spoofing detection across major brands.
-- 🤖 **SecureAI Neural Threat Intelligence:** Real-time conversational security advisor powered by rotated Gemini 3.6 Flash & Groq Compound LLMs.
-- 📱 **Specialized Scanners:**
-  - **QR Code Scanner:** Decodes uploaded images or camera frames for embedded malicious links.
-  - **Email Scanner:** Parses raw email headers and runs live DNS SPF/DMARC alignment audits.
-  - **Phone Number Scanner:** ITU-T E.164 standard formatting and dialing prefix verification.
-- 📄 **Forensic PDF Export:** Clean, printable investigation reports for incident responders.
-
----
-
-## 🛠️ API Reference
+## 🛠️ REST API Contract
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/scan` | Initiate full deep forensic scan |
-| `POST` | `/api/v1/scan?quick=true` | Execute fast sub-200ms network audit |
-| `GET` | `/api/v1/scan/:id/report` | Fetch complete telemetry & analyzer evidence |
-| `GET` | `/api/v1/lookalikes` | Query detected lookalike alerts |
-| `GET` | `/api/v1/secure-ai/summary/:id` | Retrieve dynamic AI threat summary |
+| `POST` | `/api/v1/scan?quick=true` | Execute fast sub-200ms browser quick scan |
+| `GET` | `/api/v1/scan/:id/report` | Retrieve complete telemetry & analyzer findings |
+| `GET` | `/api/v1/lookalikes` | Query detected lookalike threat alerts |
+| `GET` | `/api/v1/secure-ai/summary/:id` | Fetch dynamic AI threat executive summary |
 | `POST` | `/api/v1/secure-ai/chat` | Ask SecureAI interactive investigation questions |
-| `POST` | `/api/v1/scanners/email` | Run live DNS SPF/DMARC email audit |
-| `POST` | `/api/v1/scanners/phone` | Analyze phone number reputation & format |
+| `POST` | `/api/v1/scanners/phone` | Analyze international E.164 phone reputation |
+| `POST` | `/api/v1/scanners/email` | Run live DNS SPF/DMARC/DKIM email domain check |
+
+---
+
+## 🌐 Environment Configuration
+
+Create `backend/.env` with the following parameters:
+
+```env
+PORT=5001
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173
+
+# Supabase PostgreSQL Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# AI Intelligence API Keys (Optional for live LLM rotation)
+GEMINI_API_KEYS=your_gemini_api_key_here
+GROQ_API_KEYS=your_groq_api_key_here
+```
 
 ---
 
 ## 🛡️ License
-This project is licensed under the MIT License. Built for the Smart India Hackathon (SIH).
+Licensed under the MIT License. Built for Smart India Hackathon (SIH).

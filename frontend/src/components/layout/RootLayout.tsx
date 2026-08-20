@@ -111,6 +111,19 @@ export function RootLayout() {
     ? location.pathname.replace("/investigate/", "").split("/")[0]
     : null
 
+  useEffect(() => {
+    setSecureAIMessages([
+      {
+        role: "ai",
+        text: currentScanId 
+          ? "I have full context on this investigation. Ask me anything about the evidence, findings, or recommended actions."
+          : "I am SecureAI, your cybersecurity threat analysis assistant. Select any scan or enter a URL to analyze live evidence.",
+        chips: currentScanId ? ["Investigation Context Loaded"] : ["General Assistant"]
+      }
+    ])
+    setSecureAIError(false)
+  }, [currentScanId])
+
   const addAIResponse = async (userText: string) => {
     setSecureAILoading(true)
     setSecureAIError(false)
