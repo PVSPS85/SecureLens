@@ -13,11 +13,61 @@ import jsQR from "jsqr"
 
 type ScannerType = "qr" | "email" | "phone"
 type RiskLevel = "low" | "medium" | "high" | "critical"
-
-/* ═══════════════════════════════════════════
-   QR SCANNER
-═══════════════════════════════════════════ */
 type QRState = "idle" | "decoding" | "decoded" | "error"
+
+/**
+ * Multi-pass QR code decoding algorithm to handle:
+ * 1. Standard QR codes
+ * 2. Inverted / Dark mode QR codes (`inversionAttempts: "attemptBoth"`)
+ * 3. Multi-scale resampling (0.5x, 0.75x, 1.5x, 2.0x) for high/low resolution QR images
+ * 4. Contrast binarization thresholding to decode stylized QR codes with center icons (e.g. Chrome Dino QR)
+ */
+function decodeMultiPassQR(img: HTMLImageElement): { data: string; width: number; height: number } | null {
+  const canvas = document.createElement("canvas")
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })
+  if (!ctx) return null
+
+  // Pass 1: Original Canvas with Inversion Attempts
+  canvas.width = img.width
+  canvas.height = img.height
+  ctx.drawImage(img, 0, 0)
+  let imgData = ctx.getImageData(0, 0, img.width, img.height)
+  let result = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" })
+  if (result?.data) return { data: result.data, width: img.width, height: img.height }
+
+  // Pass 2: Multi-Scale Resampling (1.5x, 2.0x, 0.75x, 0.5x)
+  const scales = [1.5, 2.0, 0.75, 0.5]
+  for (const scale of scales) {
+    const sw = Math.round(img.width * scale)
+    const sh = Math.round(img.height * scale)
+    if (sw <= 0 || sh <= 0) continue
+    canvas.width = sw
+    canvas.height = sh
+    ctx.drawImage(img, 0, 0, sw, sh)
+    imgData = ctx.getImageData(0, 0, sw, sh)
+    result = jsQR(imgData.data, sw, sh, { inversionAttempts: "attemptBoth" })
+    if (result?.data) return { data: result.data, width: sw, height: sh }
+  }
+
+  // Pass 3: Binarization / Contrast Thresholding (removes grayscale anti-aliasing around logos like Chrome Dino)
+  canvas.width = img.width
+  canvas.height = img.height
+  ctx.drawImage(img, 0, 0)
+  imgData = ctx.getImageData(0, 0, img.width, img.height)
+  const d = imgData.data
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+    const bw = gray < 140 ? 0 : 255
+    d[i] = bw
+    d[i + 1] = bw
+    d[i + 2] = bw
+  }
+  ctx.putImageData(imgData, 0, 0)
+  result = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" })
+  if (result?.data) return { data: result.data, width: img.width, height: img.height }
+
+  return null
+}
 
 function QRScannerView() {
   const navigate = useNavigate()
@@ -42,33 +92,28 @@ function QRScannerView() {
         const canvas = document.createElement("canvas")
         const ctx = canvas.getContext("2d")
         canvas.width = img.width
-        canvas.height = img.height
-        ctx?.drawImage(img, 0, 0)
-        const imageData = ctx?.getImageData(0, 0, img.width, img.height)
-        if (imageData) {
-          const code = jsQR(imageData.data, imageData.width, imageData.height)
-          if (code && code.data) {
-            const raw = code.data
-            setDecodedUrl(raw)
+        const decoded = decodeMultiPassQR(img)
+        if (decoded && decoded.data) {
+          const raw = decoded.data
+          setDecodedUrl(raw)
 
-            // Calculate rich QR matrix diagnostics
-            const isUrl = /^https?:\/\//i.test(raw)
-            const isObfuscatedShortener = /bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly/i.test(raw)
-            const isDeepLink = /^[a-z0-9+.-]+:/i.test(raw) && !isUrl
+          // Calculate rich QR matrix diagnostics
+          const isUrl = /^https?:\/\//i.test(raw)
+          const isObfuscatedShortener = /bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly/i.test(raw)
+          const isDeepLink = /^[a-z0-9+.-]+:/i.test(raw) && !isUrl
 
-            setQrDetails({
-              matrixDimensions: `${imageData.width}×${imageData.height} px`,
-              payloadLength: `${new Blob([raw]).size} bytes`,
-              encodingType: isUrl ? "URI / Web Destination" : isDeepLink ? "Application Deep Link" : "Alphanumeric String",
-              errorCorrection: "Reed-Solomon Level M (15% Recovery)",
-              isShortener: isObfuscatedShortener,
-              isDeepLink,
-              riskLevel: isObfuscatedShortener ? "HIGH" : "LOW"
-            })
+          setQrDetails({
+            matrixDimensions: `${decoded.width}×${decoded.height} px`,
+            payloadLength: `${new Blob([raw]).size} bytes`,
+            encodingType: isUrl ? "URI / Web Destination" : isDeepLink ? "Application Deep Link" : "Alphanumeric String",
+            errorCorrection: "Reed-Solomon Level M (15% Recovery)",
+            isShortener: isObfuscatedShortener,
+            isDeepLink,
+            riskLevel: isObfuscatedShortener ? "HIGH" : "LOW"
+          })
 
-            setQRState("decoded")
-            return
-          }
+          setQRState("decoded")
+          return
         }
         setDecodeError("Could not detect a clear QR code matrix in the uploaded image. Please ensure the QR is well-lit and unobstructed.")
         setQRState("error")
