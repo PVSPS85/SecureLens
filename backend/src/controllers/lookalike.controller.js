@@ -16,7 +16,7 @@ export const getLookalikeAlerts = async (req, res, next) => {
     // Sanitize parameters to prevent resource exhaustion
     if (page <= 0) page = 1;
     if (limit <= 0) limit = 10;
-    if (limit > 50) limit = 50; // Cap maximum limit
+    if (limit > 250) limit = 250; // Cap maximum limit to 250 to allow fetching in chunks
 
     const filters = {};
     if (risk) filters.risk = risk;
