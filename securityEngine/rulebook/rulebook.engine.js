@@ -204,12 +204,16 @@ class RulebookEngine {
       );
     }
 
-    // 3b. Self-signed or expired TLS → certificate is untrustworthy
-    if (tlsSelfSigned || tlsExpired) {
+    // 3b. Self-signed, expired, or invalid/mismatched TLS → certificate is untrustworthy
+    if (tlsSelfSigned || tlsExpired || (!tlsAuthorized && tlsData.authorized !== undefined)) {
       score += 60;
-      const reason = tlsExpired ? 'expired' : 'self-signed';
+      const reason = tlsExpired 
+        ? 'expired' 
+        : tlsSelfSigned 
+          ? 'self-signed' 
+          : (tlsData.authorizationError || 'untrusted / hostname mismatch');
       detectedRisks.push(
-        `COMPOUND: TLS certificate is ${reason} — data in transit may be intercepted or the issuer is unverifiable`
+        `COMPOUND: TLS certificate is ${reason} — data in transit may be intercepted or the identity is unverifiable`
       );
     }
 

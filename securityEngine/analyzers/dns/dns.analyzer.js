@@ -1,6 +1,10 @@
 const dns = require('dns').promises;
 const BaseAnalyzer = require('../../contracts/analyzer.interface');
 
+// In-memory DNS cache with TTL (5 minutes)
+const dnsCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 class DNSAnalyzer extends BaseAnalyzer {
   constructor() {
     super('dns');
@@ -8,6 +12,13 @@ class DNSAnalyzer extends BaseAnalyzer {
 
   async analyze(context) {
     const domain = context.hostname || context.value;
+
+    // Check memory cache first
+    const cached = dnsCache.get(domain);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      return this.formatResult(true, cached.evidence);
+    }
+
     const records = {};
 
     try {
@@ -32,6 +43,14 @@ class DNSAnalyzer extends BaseAnalyzer {
         records
       };
 
+      // Store in cache
+      dnsCache.set(domain, { timestamp: Date.now(), evidence });
+      // Keep cache bounded
+      if (dnsCache.size > 2000) {
+        const firstKey = dnsCache.keys().next().value;
+        dnsCache.delete(firstKey);
+      }
+
       return this.formatResult(true, evidence);
     } catch (err) {
       return this.formatResult(false, {}, err);
@@ -40,3 +59,4 @@ class DNSAnalyzer extends BaseAnalyzer {
 }
 
 module.exports = DNSAnalyzer;
+

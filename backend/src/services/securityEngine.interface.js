@@ -11,16 +11,16 @@ import SecurityEngine from '../../../securityEngine/index.js';/**
  * @param {object} normalizedTargetData - Normalized scan target details.
  * @returns {Promise<object>} Detailed scan evidence findings.
  */
-export const analyzeTarget = async (normalizedTargetData) => {
+export const analyzeTarget = async (normalizedTargetData, options = {}) => {
   const { target, type, details } = normalizedTargetData;
 
-  logger.info(`[Security Engine] Starting live analysis for Target: "${target}" | Type: "${type}"`);
+  logger.info(`[Security Engine] Starting live analysis for Target: "${target}" | Type: "${type}" | Mode: "${options.mode || 'full'}"`);
 
   const engine = new SecurityEngine();
   let results;
 
   try {
-    results = await engine.scan(target);
+    results = await engine.scan(target, options);
   } catch (error) {
     logger.error(`[Security Engine] Fatal error analyzing target ${target}: ${error.message}`);
     throw error;

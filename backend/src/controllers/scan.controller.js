@@ -193,12 +193,15 @@ export const startScan = async (req, res, next) => {
     // 4. Progress scan status to running
     await updateScanStatus(scanId, 'running', 0, 'unknown');
 
+    const isQuickRequest = req.query.quick === 'true' || req.body.quick === true;
+    const scanMode = isQuickRequest ? 'quick' : 'full';
+
     // 5. Invoke Security Engine analysis (simulated facts audit)
     const engineEvidence = await analyzeTarget({
       target: type === 'domain' ? target : normalized.normalizedUrl,
       type,
       details
-    });
+    }, { mode: scanMode });
 
     // 6. Build authoritative risk metrics using Security Rulebook Scoring Engine
     const riskResult = calculateRiskResult(engineEvidence);

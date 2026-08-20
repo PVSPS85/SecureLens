@@ -38,9 +38,16 @@ class SecurityEngine {
   /**
    * Scans a target domain, URL, or IP.
    * @param {string} rawTarget 
+   * @param {object} [options={}] - Scan options: mode ('full' | 'quick' | 'fast')
    */
-  async scan(rawTarget) {
+  async scan(rawTarget, options = {}) {
     const targetContext = TargetUtils.parseTarget(rawTarget);
+
+    // If quick/fast mode requested, filter out heavy browser/visual analyzers
+    const isQuick = options.mode === 'quick' || options.mode === 'fast' || options.quick === true;
+    const activeAnalyzers = isQuick
+      ? this.analyzers.filter(a => a.name !== 'browser' && a.name !== 'visual')
+      : this.analyzers;
 
     // Fallback: If target is not an IP, resolve it so IPASNAnalyzer has an IP to test
     if (targetContext.type !== 'ip' && !targetContext.resolvedIp) {
@@ -52,8 +59,8 @@ class SecurityEngine {
       }
     }
 
-    // Execute all analyzers concurrently with failure isolation
-    const analyzerPromises = this.analyzers.map(analyzer => 
+    // Execute active analyzers concurrently with failure isolation
+    const analyzerPromises = activeAnalyzers.map(analyzer => 
       analyzer.analyze(targetContext).catch(err => 
         FailureHandler.createFallback(analyzer.name, err)
       )
@@ -66,7 +73,7 @@ class SecurityEngine {
     const analyzersDict = evidencePayload.analyzers;
 
     // Compute meta metrics
-    const completeness = CompletenessCalculator.calculate(analyzersDict, this.analyzers.length);
+    const completeness = CompletenessCalculator.calculate(analyzersDict, activeAnalyzers.length);
     const confidence = ConfidenceCalculator.calculate(analyzersDict);
 
     // Evaluate risks using Rulebook
