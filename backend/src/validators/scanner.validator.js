@@ -73,11 +73,20 @@ export const validatePhone = (phoneNumber) => {
     return { isValid: false, error: 'Phone number must be a text string.' };
   }
   
-  // Strip all whitespaces and dashes for uniform validation checks
-  const sanitized = phoneNumber.trim().replace(/[\s-()]+/g, '');
+  // Strip all whitespaces and dashes
+  let sanitized = phoneNumber.trim().replace(/[\s-()]+/g, '');
+
+  // Prepend + if missing (defaulting to +91 India prefix for 10-digit national inputs)
+  if (!sanitized.startsWith('+')) {
+    if (sanitized.length === 10) {
+      sanitized = `+91${sanitized}`;
+    } else {
+      sanitized = `+${sanitized}`;
+    }
+  }
 
   if (!PHONE_REGEX.test(sanitized)) {
-    return { isValid: false, error: 'Phone number must conform to E.164 international format (e.g. +14155552671).' };
+    return { isValid: false, error: 'Phone number must conform to E.164 international format (e.g. +918105634383 or +14155552671).' };
   }
 
   return { isValid: true, sanitized };

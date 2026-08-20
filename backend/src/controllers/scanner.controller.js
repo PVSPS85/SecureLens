@@ -85,7 +85,7 @@ export const scanEmailDomain = async (req, res, next) => {
  * STRICT PRIVACY CONSTRAINT: Never exposes identity metadata or personal names.
  */
 export const scanPhoneReputation = async (req, res, next) => {
-  const { phoneNumber } = req.body;
+  const phoneNumber = req.body.phoneNumber || req.body.phone;
 
   try {
     const validation = validatePhone(phoneNumber);

@@ -62,14 +62,20 @@ export const analyzeEmailSecurity = async (domain) => {
   const cleanDomain = domain.toLowerCase().trim();
   let spfRecord = null;
   let dmarcRecord = null;
+  let dkimRecord = null;
   let mxRecords = [];
 
   const dnsPromises = (await import('dns')).promises;
 
   try {
-    const [txtRes, dmarcRes, mxRes] = await Promise.allSettled([
+    const [txtRes, dmarcRes, dkimRes, mxRes] = await Promise.allSettled([
       dnsPromises.resolveTxt(cleanDomain),
       dnsPromises.resolveTxt(`_dmarc.${cleanDomain}`),
+      Promise.any([
+        dnsPromises.resolveTxt(`default._domainkey.${cleanDomain}`),
+        dnsPromises.resolveTxt(`google._domainkey.${cleanDomain}`),
+        dnsPromises.resolveTxt(`k1._domainkey.${cleanDomain}`)
+      ]),
       dnsPromises.resolveMx(cleanDomain)
     ]);
 
@@ -85,6 +91,12 @@ export const analyzeEmailSecurity = async (domain) => {
       if (dmarc) dmarcRecord = dmarc;
     }
 
+    if (dkimRes.status === 'fulfilled') {
+      const flat = dkimRes.value.flat();
+      const dkim = flat.find(r => typeof r === 'string' && (r.toLowerCase().includes('v=dkim1') || r.toLowerCase().includes('k=rsa')));
+      if (dkim) dkimRecord = dkim;
+    }
+
     if (mxRes.status === 'fulfilled') {
       mxRecords = mxRes.value;
     }
@@ -94,13 +106,17 @@ export const analyzeEmailSecurity = async (domain) => {
 
   const hasSPF = Boolean(spfRecord);
   const hasDMARC = Boolean(dmarcRecord);
+  const hasDKIM = Boolean(dkimRecord);
   const hasMX = mxRecords.length > 0;
 
   // Calculate score: 100 max, deductions for missing email authentication
   let reputationScore = 100;
-  if (!hasSPF) reputationScore -= 30;
-  if (!hasDMARC) reputationScore -= 30;
-  if (!hasMX) reputationScore -= 20;
+  if (!hasSPF) reputationScore -= 25;
+  if (!hasDMARC) reputationScore -= 25;
+  if (!hasDKIM) reputationScore -= 20;
+  if (!hasMX) reputationScore -= 30;
+
+  if (reputationScore < 0) reputationScore = 0;
 
   const records = {
     spf: {
@@ -112,6 +128,11 @@ export const analyzeEmailSecurity = async (domain) => {
       status: hasDMARC ? 'valid' : 'missing',
       record: dmarcRecord || `No DMARC record found at _dmarc.${cleanDomain}`,
       description: hasDMARC ? 'DMARC alignment policy is published in DNS.' : 'Missing DMARC policy — receiver cannot enforce sender alignment.'
+    },
+    dkim: {
+      status: hasDKIM ? 'valid' : 'missing',
+      record: dkimRecord || `No standard DKIM selector record found at _domainkey.${cleanDomain}`,
+      description: hasDKIM ? 'DKIM public key is published in DNS.' : 'No standard DKIM selector public key detected in DNS.'
     },
     mx: {
       status: hasMX ? 'valid' : 'missing',
@@ -144,44 +165,106 @@ export const analyzePhoneReputation = async (phoneNumber) => {
   const masked = phoneNumber.length > 6 ? `${phoneNumber.slice(0, 6)}XXXX` : phoneNumber;
   logger.info(`[Security Engine] Starting Phone Reputation Analysis for: "${masked}"`);
 
-  // Country prefix map
+  // Comprehensive ITU-T E.164 Country Prefix Map
   const prefixMap = {
     '+1': 'North America (US/CA)',
-    '+44': 'United Kingdom',
-    '+91': 'India',
-    '+61': 'Australia',
-    '+49': 'Germany',
+    '+7': 'Russia / Kazakhstan',
+    '+20': 'Egypt',
+    '+27': 'South Africa',
+    '+30': 'Greece',
+    '+31': 'Netherlands',
+    '+32': 'Belgium',
     '+33': 'France',
+    '+34': 'Spain',
+    '+39': 'Italy',
+    '+41': 'Switzerland',
+    '+44': 'United Kingdom',
+    '+49': 'Germany',
+    '+51': 'Peru',
+    '+52': 'Mexico',
+    '+55': 'Brazil',
+    '+56': 'Chile',
+    '+57': 'Colombia',
+    '+60': 'Malaysia',
+    '+61': 'Australia',
+    '+62': 'Indonesia',
+    '+63': 'Philippines',
+    '+64': 'New Zealand',
+    '+65': 'Singapore',
+    '+66': 'Thailand',
     '+81': 'Japan',
+    '+82': 'South Korea',
     '+86': 'China',
-    '+7': 'Russia/Kazakhstan'
+    '+90': 'Turkey',
+    '+91': 'India',
+    '+92': 'Pakistan',
+    '+93': 'Afghanistan',
+    '+94': 'Sri Lanka',
+    '+95': 'Myanmar',
+    '+98': 'Iran',
+    '+212': 'Morocco',
+    '+234': 'Nigeria',
+    '+254': 'Kenya',
+    '+351': 'Portugal',
+    '+353': 'Ireland',
+    '+358': 'Finland',
+    '+380': 'Ukraine',
+    '+420': 'Czech Republic',
+    '+852': 'Hong Kong',
+    '+886': 'Taiwan',
+    '+971': 'United Arab Emirates',
+    '+972': 'Israel',
+    '+966': 'Saudi Arabia'
   };
 
-  let detectedCountry = 'International / Global';
+  let detectedCountry = 'International / Global Destination';
+  let matchedPrefix = '';
+  
+  // Match prefix by longest prefix matching strategy
   for (const [pfx, country] of Object.entries(prefixMap)) {
-    if (phoneNumber.startsWith(pfx)) {
+    if (phoneNumber.startsWith(pfx) && pfx.length > matchedPrefix.length) {
       detectedCountry = country;
-      break;
+      matchedPrefix = pfx;
     }
   }
 
-  // Format validation
+  // E.164 Format validation
   const isE164 = /^\+[1-9]\d{6,14}$/.test(phoneNumber);
-  const spamScore = isE164 ? 15 : 75;
-  const riskLevel = spamScore > 50 ? 'HIGH' : 'LOW';
+  
+  // Heuristic Line Type & Risk checks (No PII)
+  const isShortCode = phoneNumber.length < 8;
+  const isRepeatedDigits = /(\d)\1{5,}/.test(phoneNumber);
+  const isPremiumRate = /^\+(?:1900|449|91900)/.test(phoneNumber);
 
-  logger.info(`[Security Engine] Completed Phone Reputation Analysis for: "${masked}"`);
+  let spamScore = 15;
+  if (!isE164) spamScore += 45;
+  if (isShortCode) spamScore += 30;
+  if (isRepeatedDigits) spamScore += 25;
+  if (isPremiumRate) spamScore += 50;
+
+  if (spamScore > 100) spamScore = 100;
+  
+  const riskLevel = spamScore >= 75 ? 'CRITICAL' : spamScore >= 50 ? 'HIGH' : spamScore >= 30 ? 'MEDIUM' : 'LOW';
+
+  let lineType = 'Standard Mobile/Fixed Line';
+  if (isShortCode) lineType = 'Shortcode / Automation Line';
+  else if (isPremiumRate) lineType = 'Premium Rate Service Number';
+  else if (isE164) lineType = 'Standard E.164 Mobile/Landline Allocation';
+
+  logger.info(`[Security Engine] Completed Phone Reputation Analysis for: "${masked}" | Score: ${spamScore} | Risk: ${riskLevel}`);
 
   return {
     phoneNumber,
-    countryPrefix: phoneNumber.slice(0, 3),
+    countryPrefix: matchedPrefix || phoneNumber.slice(0, 3),
     country: detectedCountry,
     isStandardE164: isE164,
     spamScore,
     riskLevel,
-    lineType: 'Standard E.164 Allocation',
-    carrier: 'Carrier info protected by privacy policy',
-    recommendation: riskLevel === 'HIGH' ? 'Non-standard number format detected. Verify sender identity.' : 'Standard international format verified.'
+    lineType,
+    carrier: 'Carrier assignment privacy protected (ITU-T standard)',
+    recommendation: riskLevel === 'CRITICAL' || riskLevel === 'HIGH'
+      ? 'Suspicious or non-standard number format detected. Exercise caution before trusting SMS or caller identity.'
+      : 'Valid E.164 international numbering structure verified.'
   };
 };
 
