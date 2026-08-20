@@ -34,12 +34,18 @@ body {
   min-height: 400px;
   display: flex;
   flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 .extension-window {
   display: flex;
   flex-direction: column;
   min-height: 400px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.2);
   animation: slideUpFade 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -54,6 +60,8 @@ body {
   align-items: center;
   padding: 14px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
   overflow: hidden;
 }
 
@@ -291,7 +299,7 @@ body {
 .btn {
   width: 100%;
   padding: 11px 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
