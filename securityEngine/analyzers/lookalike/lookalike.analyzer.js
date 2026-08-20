@@ -2,10 +2,6 @@ const BaseAnalyzer = require('../../contracts/analyzer.interface');
 const DomainSimilarity = require('./domain-similarity');
 const HomoglyphDetector = require('./homoglyph');
 
-const BaseAnalyzer = require('../../contracts/analyzer.interface');
-const DomainSimilarity = require('./domain-similarity');
-const HomoglyphDetector = require('./homoglyph');
-
 // Target protected brands list (expanded for high-value phishing targets)
 const PROTECTED_BRANDS = [
   'google', 'microsoft', 'paypal', 'amazon', 'apple', 'facebook',
