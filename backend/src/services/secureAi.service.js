@@ -88,6 +88,7 @@ ${recommendationSummaryText(recommendationText)}
 
   return {
     summary: markdownSummary,
+    executiveSummary: aiSummary,
     generatedAt: new Date().toISOString(),
     rulebookVersion: riskResult.rulebookVersion || '1.0'
   };

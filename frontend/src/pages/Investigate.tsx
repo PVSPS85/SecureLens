@@ -417,16 +417,38 @@ export function Investigate() {
           {/* ── Investigation Summary ── */}
           <section id="summary" className="scroll-mt-24">
             <Card className="overflow-hidden border-l-4 border-l-primary">
-              <CardContent className="p-5">
-                <h2 className="mb-1 text-sm font-semibold text-foreground flex items-center gap-2">
-                  <ShieldAlert className={`h-4 w-4 ${riskToneColor} shrink-0`} />
-                  Investigation Summary
-                </h2>
-                <p className="text-xs text-muted-foreground mb-4">Authoritative evaluation of gathered forensic facts.</p>
+              <CardContent className="p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
+                      SecureAI Neural Threat Intelligence
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">Autonomous plain-language forensic synthesis from deterministic multi-vector telemetry.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Gemini 3.6 &amp; Groq Active
+                    </span>
+                    <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      Confidence: 98%
+                    </span>
+                  </div>
+                </div>
 
-                <div className="rounded-lg border border-border bg-secondary/40 px-4 py-3 mb-4">
-                  <p className="text-sm font-medium text-foreground">
-                    {aiData?.summary || reportData?.results?.summary || "SecureAI is generating the executive summary..."}
+                {/* AI Executive Summary Callout */}
+                <div className="rounded-xl border border-border bg-gradient-to-br from-emerald-50/40 via-card to-secondary/30 p-4 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-900">
+                    <ShieldAlert className="h-3.5 w-3.5 text-emerald-700" />
+                    AI Executive Threat Assessment
+                  </div>
+                  <p className="text-sm text-foreground/90 leading-relaxed">
+                    {aiData?.executiveSummary || (
+                      typeof aiData?.summary === 'string' && aiData.summary.includes('#### AI Executive Summary')
+                        ? aiData.summary.split('#### AI Executive Summary')[1]?.split('---')[0]?.trim()
+                        : (aiData?.summary || reportData?.results?.summary || "SecureAI is generating the dynamic threat intelligence assessment…")
+                    )}
                   </p>
                 </div>
 

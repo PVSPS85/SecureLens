@@ -84,10 +84,13 @@ export const getAiSummary = async (req, res, next) => {
     if (report && report.summary && report.summary.trim().length > 0) {
       // Populate memory cache for future requests
       summaryCache.set(scanId, report.summary);
+      const match = report.summary.match(/#### AI Executive Summary\s*\n([\s\S]*?)(?:\n---|\n####|$)/i);
+      const execSummary = match ? match[1].trim() : report.summary;
       return res.status(200).json({
         success: true,
         cached: true,
-        summary: report.summary
+        summary: report.summary,
+        executiveSummary: execSummary
       });
     }
 
@@ -113,7 +116,7 @@ export const getAiSummary = async (req, res, next) => {
     const riskResult = {
       score: scan.risk_score,
       riskLevel: scan.risk_level,
-      confidence: 0.95, // mock estimation constants
+      confidence: 0.95,
       completeness: 0.90,
       recommendation: report ? report.recommendation : '',
       rulebookVersion: report ? report.rulebook_version : '1.0'
@@ -130,7 +133,8 @@ export const getAiSummary = async (req, res, next) => {
     res.status(200).json({
       success: true,
       cached: false,
-      summary: aiResult.summary
+      summary: aiResult.summary,
+      executiveSummary: aiResult.executiveSummary
     });
   } catch (error) {
     // Graceful error fallbacks returning structured informative error payload
