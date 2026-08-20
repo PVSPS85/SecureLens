@@ -4,15 +4,13 @@ import { analyzeTarget } from '../services/securityEngine.interface.js';
 import { calculateRiskResult } from '../services/scoringEngine.service.js';
 import { insertScan, updateScanStatus, getScanById } from '../db/queries/scans.queries.js';
 import { insertReport, getReportByScanId } from '../db/queries/reports.queries.js';
-import { insertLookalikeAlert } from '../db/queries/lookalike.queries.js';
+import { insertLookalikeAlert, getLookalikeAlerts as getCachedLookalikeAlerts } from '../db/queries/lookalike.queries.js';
+import { getCachedScans, computeCachedMetrics } from '../db/cache.js';
 import supabase from '../db/client.js';
 import logger from '../utils/logger.js';
 
 // Matches standard RFC 4122 UUID v4 formatting syntax
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-// Double-layer cache system: RAM cache to serve repeat scans in <2ms
-const scanMemoryCache = new Map();
 
 /**
  * Asynchronously checks whether the completed scan has lookalike / brand-
@@ -117,61 +115,30 @@ export const startScan = async (req, res, next) => {
 
     const { type, details } = req.validatedTarget; // Extracted from validate middleware
 
-    // 2a. RAM Memory Cache Lookup (Primary cache layer)
-    if (scanMemoryCache.has(normalized.normalizedUrl)) {
-      logger.info(`[Scan Controller] RAM Cache HIT for target: "${normalized.normalizedUrl}"`);
-      const cachedResponse = scanMemoryCache.get(normalized.normalizedUrl);
-      return res.status(200).json({
-        success: true,
-        data: {
-          ...cachedResponse,
-          cached: true
-        }
-      });
-    }
-
-    // 2b. Database Cache Lookup (Secondary cache layer fallback)
-    logger.info(`[Scan Controller] Checking scan database cache for target: "${normalized.normalizedUrl}"`);
-    const { data: existingScans, error: cacheError } = await supabase
-      .from('scans')
-      .select('*')
-      .eq('normalized_target', normalized.normalizedUrl)
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (!cacheError && existingScans && existingScans.length > 0) {
-      const match = existingScans[0];
-      const report = await getReportByScanId(match.id);
-      
+    // 2a. In-Memory Cache Lookup (instant, 0ms latency)
+    const allScans = getCachedScans(500);
+    const cachedMatch = allScans.find(s => 
+      (s.normalized_target === normalized.normalizedUrl || s.target === normalized.normalizedUrl) 
+      && s.status === 'completed'
+    );
+    
+    if (cachedMatch) {
+      const report = await getReportByScanId(cachedMatch.id);
       if (report) {
-        logger.info(`[Scan Controller] Database Cache HIT for target: "${normalized.normalizedUrl}" | Scan ID: ${match.id}`);
-        
-        const responseData = {
-          scanId: match.id,
-          scan: {
-            id: match.id,
-            target: normalized.normalizedUrl,
-            risk_score: match.risk_score,
-            risk_level: match.risk_level.toLowerCase()
-          },
-          target: normalized.normalizedUrl,
-          type: match.target_type,
-          status: 'completed',
-          riskScore: match.risk_score,
-          riskLevel: match.risk_level,
-          confidence: report.confidence || 0.95,
-          findings: report.findings,
-          recommendations: report.recommendation ? report.recommendation.split('\n') : []
-        };
-
-        // Populate RAM cache for future hits
-        scanMemoryCache.set(normalized.normalizedUrl, responseData);
-
+        logger.info(`[Scan Controller] Cache HIT for target: "${normalized.normalizedUrl}" | Scan ID: ${cachedMatch.id}`);
         return res.status(200).json({
           success: true,
           data: {
-            ...responseData,
+            scanId: cachedMatch.id,
+            scan: { id: cachedMatch.id, target: normalized.normalizedUrl, risk_score: cachedMatch.risk_score, risk_level: (cachedMatch.risk_level || '').toLowerCase() },
+            target: normalized.normalizedUrl,
+            type: cachedMatch.target_type,
+            status: 'completed',
+            riskScore: cachedMatch.risk_score,
+            riskLevel: cachedMatch.risk_level,
+            confidence: 0.95,
+            findings: report.findings,
+            recommendations: report.recommendation ? report.recommendation.split('\n') : [],
             cached: true
           }
         });
@@ -262,8 +229,8 @@ export const startScan = async (req, res, next) => {
       evidence: evidenceJson
     };
 
-    // Populate RAM cache for future hits
-    scanMemoryCache.set(normalized.normalizedUrl, freshResponseData);
+    // Cache populated inside scanCache automatically via updateScanStatus
+    logger.info(`[Scan Controller] Scan complete for "${normalized.normalizedUrl}" | Score: ${riskScore} | Level: ${riskLevel}`);
 
     // 9. Return response containing the fully compiled risk report
     // INTEGRATION NOTE: Returns BOTH legacy flat variables and the nested 'scan'
@@ -390,23 +357,19 @@ export const quickScan = async (req, res, next) => {
   const { target, type } = req.validatedTarget;
 
   try {
-    // 1. Query scans database table directly for existing completed targets
-    logger.info(`[Scan Controller] Querying scans database cache for target: "${target}"`);
-    const { data: existingScans, error } = await supabase
-      .from('scans')
-      .select('*')
-      .eq('target', target)
-      .eq('status', 'completed')
-      .limit(1);
+    // 1. Check in-memory scan cache first — instant, 0ms latency
+    logger.info(`[Scan Controller] Quick scan cache lookup for target: "${target}"`);
+    
+    const allCachedScans = getCachedScans(200);
+    const existingMatch = allCachedScans.find(s => 
+      (s.target === target || s.normalized_target === target) && s.status === 'completed'
+    );
 
-    if (error) throw error;
-
-    if (existingScans && existingScans.length > 0) {
-      const match = existingScans[0];
-      const report = await getReportByScanId(match.id);
+    if (existingMatch) {
+      const report = await getReportByScanId(existingMatch.id);
       
-      const score = typeof match.risk_score === 'number' ? match.risk_score : 0;
-      const rawLevel = (match.risk_level || '').toLowerCase();
+      const score = typeof existingMatch.risk_score === 'number' ? existingMatch.risk_score : 0;
+      const rawLevel = (existingMatch.risk_level || '').toLowerCase();
       
       let severity = 'SAFE';
       if (rawLevel === 'critical' || score > 70) {
@@ -438,13 +401,11 @@ export const quickScan = async (req, res, next) => {
         severity,
         description,
         signals,
-        scanId: match.id
+        scanId: existingMatch.id
       });
     }
 
     // 2. Fast evaluation signal fallback for immediate extension response
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
     const isIp = type === 'ip';
     const score = isIp ? 12 : 45;
     const severity = isIp ? 'SAFE' : 'WARNING';
@@ -469,150 +430,43 @@ export const quickScan = async (req, res, next) => {
 };
 
 /**
- * Fetches recent scan records directly from Supabase or in-memory store.
+ * Fetches recent scan records — served from in-memory cache (instant, 0ms).
  */
 export const getRecentScans = async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit, 10) || 10;
-    
-    // Quick query with 600ms timeout
-    const fetchPromise = supabase
-      .from('scans')
-      .select('id, target, target_type, status, risk_score, risk_level, created_at, updated_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('DB_TIMEOUT')), 600)
-    );
-
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
-    if (error) throw error;
-
-    return res.status(200).json({
-      success: true,
-      data: data || []
-    });
-  } catch (error) {
-    const { getUserScanHistory } = await import('../db/queries/scans.queries.js');
-    const fallback = await getUserScanHistory(null, { limit: req.query.limit || 10 });
-    return res.status(200).json({
-      success: true,
-      data: fallback.data || []
-    });
-  }
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const scans = getCachedScans(limit);
+  return res.status(200).json({
+    success: true,
+    data: scans
+  });
 };
 
 /**
- * Computes live dashboard metrics (total counts and risk breakdowns).
+ * Computes dashboard metrics — served from in-memory cache (instant, 0ms).
  */
 export const getDashboardMetrics = async (req, res) => {
-  try {
-    const fetchPromise = supabase
-      .from('scans')
-      .select('id, risk_level, risk_score, status', { count: 'exact' });
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('DB_TIMEOUT')), 600)
-    );
-
-    const { data: scans, error, count } = await Promise.race([fetchPromise, timeoutPromise]);
-    if (error) throw error;
-
-    const totalScans = count !== null && count !== undefined ? count : (scans ? scans.length : 0);
-    let critical = 0;
-    let high = 0;
-    let medium = 0;
-    let low = 0;
-
-    (scans || []).forEach((s) => {
-      const lvl = (s.risk_level || '').toLowerCase();
-      if (lvl === 'critical') critical++;
-      else if (lvl === 'high') high++;
-      else if (lvl === 'medium') medium++;
-      else if (lvl === 'low' || lvl === 'safe') low++;
-      else {
-        if (s.risk_score >= 75) critical++;
-        else if (s.risk_score >= 50) high++;
-        else if (s.risk_score >= 25) medium++;
-        else low++;
-      }
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        totalScans,
-        critical,
-        high,
-        medium,
-        low,
-        cleanPercentage: totalScans > 0 ? Math.round((low / totalScans) * 100) : 100
-      }
-    });
-  } catch (error) {
-    const { getUserScanHistory } = await import('../db/queries/scans.queries.js');
-    const fallback = await getUserScanHistory(null, { limit: 50 });
-    const scans = fallback.data || [];
-    const totalScans = scans.length;
-    let critical = 0;
-    let high = 0;
-    let medium = 0;
-    let low = 0;
-
-    scans.forEach((s) => {
-      const lvl = (s.risk_level || '').toLowerCase();
-      if (lvl === 'critical') critical++;
-      else if (lvl === 'high') high++;
-      else if (lvl === 'medium') medium++;
-      else low++;
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        totalScans: totalScans || 24,
-        critical: critical || 3,
-        high: high || 4,
-        medium: medium || 5,
-        low: low || 12,
-        cleanPercentage: totalScans > 0 ? Math.round(((low || 12) / (totalScans || 24)) * 100) : 88
-      }
-    });
-  }
+  const metrics = computeCachedMetrics();
+  return res.status(200).json({
+    success: true,
+    data: metrics
+  });
 };
 
 /**
- * Fetches lookalike alerts from Supabase or fallback queries.
+ * Fetches lookalike alerts — served from in-memory cache (instant, 0ms).
  */
 export const getLookalikeAlerts = async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit, 10) || 10;
-    const fetchPromise = supabase
-      .from('lookalike_alerts')
-      .select('*')
-      .order('detected_at', { ascending: false })
-      .limit(limit);
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('DB_TIMEOUT')), 600)
-    );
-
-    const { data: alerts, error } = await Promise.race([fetchPromise, timeoutPromise]);
-    if (error) throw error;
-
-    return res.status(200).json({
-      success: true,
-      data: alerts || []
-    });
-  } catch (error) {
-    const { getLookalikeAlerts: getFallbackLookalikes } = await import('../db/queries/lookalike.queries.js');
-    const alerts = await getFallbackLookalikes(req.query.limit || 10);
-    return res.status(200).json({
-      success: true,
-      data: alerts || []
-    });
-  }
+  const limit = parseInt(req.query.limit, 10) || 50;
+  const { risk, status } = req.query;
+  const filters = {};
+  if (risk) filters.risk = risk;
+  if (status) filters.status = status;
+  
+  const result = await getCachedLookalikeAlerts(filters, 1, limit);
+  return res.status(200).json({
+    success: true,
+    ...result
+  });
 };
 
 export default {

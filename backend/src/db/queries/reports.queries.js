@@ -1,17 +1,13 @@
 import supabase from '../client.js';
 import logger from '../../utils/logger.js';
-
-// In-memory fallback report store
-const memoryReports = new Map();
+import { reportCache } from '../cache.js';
 
 /**
- * Inserts or updates the final authoritative scan report.
- *
- * @param {object} reportData - Structural report content.
- * @returns {Promise<object>} The inserted report record row.
+ * Inserts or updates the final scan report.
+ * Cache is updated IMMEDIATELY. Supabase write happens async in background.
  */
 export const insertReport = async (reportData) => {
-  const fallbackReport = {
+  const record = {
     scan_id: reportData.scanId,
     summary: reportData.summary,
     findings: reportData.findings || [],
@@ -22,97 +18,69 @@ export const insertReport = async (reportData) => {
     created_at: new Date().toISOString()
   };
 
-  memoryReports.set(reportData.scanId, fallbackReport);
+  // ✅ Cache immediately — zero-latency
+  reportCache.set(reportData.scanId, record);
 
-  try {
-    logger.info(`[Database Reports] Saving report findings for scan ID: "${reportData.scanId}"`);
-
-    // Use upsert to handle case where a report might already exist
-    const { data, error } = await supabase
-      .from('reports')
-      .upsert({
-        scan_id: reportData.scanId,
-        summary: reportData.summary,
-        findings: reportData.findings || [],
-        infrastructure: reportData.infrastructure || {},
-        recommendation: reportData.recommendation,
-        timeline: reportData.timeline || [],
-        rulebook_version: reportData.rulebookVersion || '1.0.0'
-      }, {
-        onConflict: 'scan_id'
-      })
-      .select()
-      .single();
-
+  // 🔄 Async background write to Supabase (non-blocking)
+  supabase.from('reports').upsert({
+    scan_id: reportData.scanId,
+    summary: reportData.summary,
+    findings: reportData.findings || [],
+    infrastructure: reportData.infrastructure || {},
+    recommendation: reportData.recommendation,
+    timeline: reportData.timeline || [],
+    rulebook_version: reportData.rulebookVersion || '1.0.0'
+  }, { onConflict: 'scan_id' }).then(({ error }) => {
     if (error) {
-      logger.warn(`[Database Reports] Supabase report upsert failed (${error.message}). Using in-memory report store.`);
-      return fallbackReport;
+      logger.warn(`[Cache] Background Supabase report upsert failed: ${error.message}`);
     }
-    memoryReports.set(reportData.scanId, data);
-    return data;
-  } catch (error) {
-    logger.warn(`[Database Reports] Exception in insertReport (${error.message}). Using in-memory report store.`);
-    return fallbackReport;
-  }
+  }).catch(() => {});
+
+  return record;
 };
 
 /**
- * Fetches the forensic report matching the target scan ID.
- *
- * @param {string} scanId - Target scan identifier.
- * @returns {Promise<object|null>} Report record row, or null.
+ * Fetches a report by scan ID. Cache-first (instant), falls back to Supabase.
  */
 export const getReportByScanId = async (scanId) => {
-  try {
-    logger.info(`[Database Reports] Fetching report details for scan ID: "${scanId}"`);
+  // ✅ Try cache first — zero-latency
+  const cached = reportCache.get(scanId);
+  if (cached) return cached;
 
+  // 🔄 Fall back to Supabase only if not in cache
+  try {
     const { data, error } = await supabase
       .from('reports')
       .select('*')
       .eq('scan_id', scanId)
       .maybeSingle();
 
-    if (error || !data) {
-      return memoryReports.get(scanId) || null;
+    if (!error && data) {
+      reportCache.set(scanId, data); // warm the cache
+      return data;
     }
-    return data;
-  } catch (error) {
-    return memoryReports.get(scanId) || null;
+  } catch (err) {
+    logger.warn(`[Cache] Supabase getReportByScanId failed: ${err.message}`);
   }
+
+  return null;
 };
 
 /**
- * Updates the summary field of a report by its scan ID.
- * Uses upsert to handle cases where the report row might not exist yet.
- *
- * @param {string} scanId - Target scan identifier.
- * @param {string} summaryText - Generated AI summary text.
- * @returns {Promise<object>} Updated or inserted report row.
+ * Updates the summary field of a report.
  */
 export const updateReportSummary = async (scanId, summaryText) => {
-  const mem = memoryReports.get(scanId) || { scan_id: scanId };
-  mem.summary = summaryText;
-  memoryReports.set(scanId, mem);
+  const existing = reportCache.get(scanId) || { scan_id: scanId };
+  const updated = { ...existing, summary: summaryText };
+  reportCache.set(scanId, updated);
 
-  try {
-    logger.info(`[Database Reports] Updating summary for scan ID: "${scanId}"`);
+  // 🔄 Async background write
+  supabase.from('reports').upsert({
+    scan_id: scanId,
+    summary: summaryText
+  }, { onConflict: 'scan_id' }).catch(() => {});
 
-    const { data, error } = await supabase
-      .from('reports')
-      .upsert({
-        scan_id: scanId,
-        summary: summaryText
-      }, {
-        onConflict: 'scan_id'
-      })
-      .select()
-      .single();
-
-    if (error) return mem;
-    return data;
-  } catch (error) {
-    return mem;
-  }
+  return updated;
 };
 
 export default {

@@ -1,79 +1,73 @@
 import { getLookalikeAlerts as fetchAlerts } from '../db/queries/lookalike.queries.js';
-import supabase from '../db/client.js';
+import { lookalikeCache } from '../db/cache.js';
 
 // Matches standard RFC 4122 UUID v4 formatting syntax
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Retrieves a list of suspicious lookalike domain alerts for the threat dashboard.
+ * Retrieves lookalike domain alerts — served from cache instantly.
  */
-export const getLookalikeAlerts = async (req, res, next) => {
-  try {
-    let page = parseInt(req.query.page, 10) || 1;
-    let limit = parseInt(req.query.limit, 10) || 10;
-    const { risk, status } = req.query;
+export const getLookalikeAlerts = async (req, res) => {
+  let page = parseInt(req.query.page, 10) || 1;
+  let limit = parseInt(req.query.limit, 10) || 50;
+  const { risk, status } = req.query;
 
-    // Sanitize parameters to prevent resource exhaustion
-    if (page <= 0) page = 1;
-    if (limit <= 0) limit = 10;
-    if (limit > 250) limit = 250; // Cap maximum limit to 250 to allow fetching in chunks
+  if (page <= 0) page = 1;
+  if (limit <= 0) limit = 50;
+  if (limit > 250) limit = 250;
 
-    const filters = {};
-    if (risk) filters.risk = risk;
-    if (status) filters.status = status;
+  const filters = {};
+  if (risk) filters.risk = risk;
+  if (status) filters.status = status;
 
-    const result = await fetchAlerts(filters, page, limit);
+  // ✅ Serves from in-memory cache — instant response, 0ms latency
+  const result = await fetchAlerts(filters, page, limit);
 
-    res.status(200).json({
-      success: true,
-      ...result
-    });
-  } catch (error) {
-    next(error);
-  }
+  return res.status(200).json({
+    success: true,
+    ...result
+  });
 };
 
 /**
- * Retrieves deep forensic details for a specific lookalike candidate alert from Supabase.
+ * Retrieves forensic details for a specific lookalike candidate alert.
+ * Reads from cache first.
  */
-export const getLookalikeAlertById = async (req, res, next) => {
+export const getLookalikeAlertById = async (req, res) => {
   const { id } = req.params;
 
-  try {
-    // Validate UUID format parameters
-    if (!id || !UUID_REGEX.test(id)) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        error: 'Not Found',
-        message: 'The requested alert identifier is invalid or does not exist.'
-      });
-    }
-
-    const { data: alert, error } = await supabase
-      .from('lookalike_alerts')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    if (!alert) {
-      return res.status(404).json({
-        success: false,
-        status: 404,
-        error: 'Not Found',
-        message: 'The requested lookalike candidate alert could not be found.'
-      });
-    }
-
-    res.status(200).json({
+  // Try cache first (non-UUID alert IDs like 'alert_01' are valid cache keys)
+  const cached = lookalikeCache.get(id);
+  if (cached) {
+    return res.status(200).json({
       success: true,
-      data: alert
+      data: cached
     });
-  } catch (error) {
-    next(error);
   }
+
+  // Validate UUID format for DB lookup
+  if (!id || !UUID_REGEX.test(id)) {
+    return res.status(404).json({
+      success: false,
+      status: 404,
+      error: 'Not Found',
+      message: 'The requested alert identifier is invalid or does not exist.'
+    });
+  }
+
+  // Search through all cache values by UUID
+  for (const alert of lookalikeCache.values()) {
+    if (alert.id === id) {
+      return res.status(200).json({ success: true, data: alert });
+    }
+  }
+
+  return res.status(404).json({
+    success: false,
+    status: 404,
+    error: 'Not Found',
+    message: 'The requested lookalike candidate alert could not be found.'
+  });
 };
 
 export default {

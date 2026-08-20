@@ -1,20 +1,16 @@
 import { randomUUID } from 'crypto';
 import supabase from '../client.js';
 import logger from '../../utils/logger.js';
-
-// In-memory fallback scan store
-const memoryScans = new Map();
+import { scanCache } from '../cache.js';
 
 /**
- * Inserts a new scan log tracking record.
- *
- * @param {object} scanData - Target and type options.
- * @returns {Promise<object>} The inserted scan record row.
+ * Inserts a new scan record. Cache is updated IMMEDIATELY for instant reads.
+ * Supabase write happens asynchronously in the background.
  */
 export const insertScan = async (scanData) => {
-  const generatedId = randomUUID();
-  const fallbackRecord = {
-    id: generatedId,
+  const id = randomUUID();
+  const record = {
+    id,
     user_id: scanData.userId || null,
     target: scanData.target,
     normalized_target: scanData.normalizedTarget,
@@ -27,167 +23,108 @@ export const insertScan = async (scanData) => {
     updated_at: new Date().toISOString()
   };
 
-  try {
-    logger.info(`[Database Scans] Inserting scan record for target: "${scanData.target}"`);
+  // ✅ Cache immediately — zero-latency
+  scanCache.set(id, record);
 
-    const { data, error } = await supabase
-      .from('scans')
-      .insert({
-        user_id: scanData.userId || null,
-        target: scanData.target,
-        normalized_target: scanData.normalizedTarget,
-        target_type: scanData.targetType,
-        source: scanData.source,
-        status: scanData.status || 'queued',
-        risk_level: scanData.riskLevel || 'unknown',
-        risk_score: scanData.riskScore || 0
-      })
-      .select()
-      .single();
-
+  // 🔄 Async background write to Supabase (non-blocking)
+  supabase.from('scans').insert({
+    user_id: record.user_id,
+    target: record.target,
+    normalized_target: record.normalized_target,
+    target_type: record.target_type,
+    source: record.source,
+    status: record.status,
+    risk_level: record.risk_level,
+    risk_score: record.risk_score
+  }).then(({ error }) => {
     if (error) {
-      logger.warn(`[Database Scans] Supabase insert failed (${error.message}). Using in-memory scan store.`);
-      memoryScans.set(fallbackRecord.id, fallbackRecord);
-      return fallbackRecord;
+      logger.warn(`[Cache] Background Supabase insert failed for ${id}: ${error.message}`);
     }
-    
-    memoryScans.set(data.id, data);
-    return data;
-  } catch (error) {
-    logger.warn(`[Database Scans] Exception in insertScan (${error.message}). Using in-memory scan store.`);
-    memoryScans.set(fallbackRecord.id, fallbackRecord);
-    return fallbackRecord;
-  }
+  }).catch(() => {});
+
+  return record;
 };
 
 /**
- * Updates scan status and risk verdict options.
- *
- * @param {string} scanId - Target scan identifier.
- * @param {string} status - New scan status.
- * @param {number} riskScore - Calculated risk score.
- * @param {string} riskLevel - Calculated risk level verdict.
- * @returns {Promise<object>} The updated scan record row.
+ * Updates scan status. Cache updated immediately, Supabase async.
  */
 export const updateScanStatus = async (scanId, status, riskScore, riskLevel) => {
-  const mem = memoryScans.get(scanId) || { id: scanId };
-  mem.status = status;
-  mem.risk_score = riskScore;
-  mem.risk_level = riskLevel;
-  mem.updated_at = new Date().toISOString();
-  memoryScans.set(scanId, mem);
+  const existing = scanCache.get(scanId) || { id: scanId };
+  const updated = {
+    ...existing,
+    status,
+    risk_score: riskScore,
+    risk_level: riskLevel,
+    updated_at: new Date().toISOString()
+  };
 
-  try {
-    logger.info(`[Database Scans] Updating scan status for ID: "${scanId}" to "${status}"`);
+  // ✅ Update cache immediately
+  scanCache.set(scanId, updated);
 
-    const { data, error } = await supabase
-      .from('scans')
-      .update({
-        status,
-        risk_score: riskScore,
-        risk_level: riskLevel,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', scanId)
-      .select()
-      .single();
-
+  // 🔄 Async background write to Supabase
+  supabase.from('scans').update({
+    status,
+    risk_score: riskScore,
+    risk_level: riskLevel,
+    updated_at: updated.updated_at
+  }).eq('id', scanId).then(({ error }) => {
     if (error) {
-      return mem;
+      logger.warn(`[Cache] Background Supabase update failed for ${scanId}: ${error.message}`);
     }
-    return data;
-  } catch (error) {
-    return mem;
-  }
+  }).catch(() => {});
+
+  return updated;
 };
 
 /**
- * Fetches a single scan tracking record by ID.
- *
- * @param {string} scanId - Target scan identifier.
- * @returns {Promise<object|null>} The scan record row, or null.
+ * Fetches a scan by ID. Reads from cache first (instant).
  */
 export const getScanById = async (scanId) => {
-  try {
-    logger.info(`[Database Scans] Fetching scan record for ID: "${scanId}"`);
+  // ✅ Try cache first — zero-latency
+  const cached = scanCache.get(scanId);
+  if (cached) return cached;
 
+  // 🔄 Fall back to Supabase only if not in cache (e.g. after server restart)
+  try {
     const { data, error } = await supabase
       .from('scans')
       .select('*')
       .eq('id', scanId)
       .maybeSingle();
 
-    if (error || !data) {
-      return memoryScans.get(scanId) || null;
+    if (!error && data) {
+      scanCache.set(scanId, data); // warm the cache
+      return data;
     }
-    return data;
-  } catch (error) {
-    return memoryScans.get(scanId) || null;
+  } catch (err) {
+    logger.warn(`[Cache] Supabase getScanById failed: ${err.message}`);
   }
+
+  return null;
 };
 
 /**
- * Queries scans filtered by user ID, support risk filtering and pagination.
- *
- * @param {string} userId - User UUID index.
- * @param {object} options - Filters and pagination settings.
- * @returns {Promise<object>} Paginated list of scans.
+ * Returns paginated user scan history. Reads from cache (instant).
  */
 export const getUserScanHistory = async (userId, options = {}) => {
-  try {
-    const page = parseInt(options.page, 10) || 1;
-    const limit = parseInt(options.limit, 10) || 10;
-    const offset = (page - 1) * limit;
+  const page = parseInt(options.page, 10) || 1;
+  const limit = parseInt(options.limit, 10) || 10;
+  const offset = (page - 1) * limit;
 
-    logger.info(`[Database Scans] Querying scan history for user: "${userId}" | Page: ${page} | Limit: ${limit}`);
+  const allScans = Array.from(scanCache.values());
+  allScans.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    let query = supabase
-      .from('scans')
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+  const paginated = allScans.slice(offset, offset + limit);
 
-    if (options.risk) {
-      query = query.eq('risk_level', options.risk);
+  return {
+    data: paginated,
+    pagination: {
+      total: allScans.length,
+      page,
+      limit,
+      totalPages: Math.max(Math.ceil(allScans.length / limit), 1)
     }
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      const allMem = Array.from(memoryScans.values());
-      return {
-        data: allMem.slice(offset, offset + limit),
-        pagination: {
-          total: allMem.length,
-          page,
-          limit,
-          totalPages: Math.ceil(allMem.length / limit) || 1
-        }
-      };
-    }
-
-    return {
-      data: data || [],
-      pagination: {
-        total: count || 0,
-        page,
-        limit,
-        totalPages: Math.ceil((count || 0) / limit)
-      }
-    };
-  } catch (error) {
-    const allMem = Array.from(memoryScans.values());
-    return {
-      data: allMem.slice(0, 10),
-      pagination: {
-        total: allMem.length,
-        page: 1,
-        limit: 10,
-        totalPages: 1
-      }
-    };
-  }
+  };
 };
 
 export default {

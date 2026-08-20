@@ -3,8 +3,8 @@
 // Connects live to SecureLens API Server
 // =========================================================================
 const CONFIG = {
-  QUICK_SCAN_API_URL: 'http://localhost:5001/api/v1/scan?quick=true',
-  FETCH_TIMEOUT_MS: 6000,
+  QUICK_SCAN_API_URL: 'http://localhost:5001/api/v1/scan/quick',
+  FETCH_TIMEOUT_MS: 8000,
 };
 
 // Listener for messages from popup.js
