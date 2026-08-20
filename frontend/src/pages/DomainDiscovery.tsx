@@ -75,28 +75,21 @@ export function DomainDiscovery() {
     if (!silent) setIsLoading(true)
     setHasError(false)
     try {
-      // Use the dedicated lookalikes endpoint — supports up to 50 results per page.
-      // Fetch two pages to get up to 100 records for the local table.
-      const [res1, res2] = await Promise.all([
-        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=1"),
-        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=2"),
+      // Query up to 200 records across pages dynamically
+      const [p1, p2, p3, p4] = await Promise.allSettled([
+        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=1").then(r => r.ok ? r.json() : { data: [] }),
+        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=2").then(r => r.ok ? r.json() : { data: [] }),
+        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=3").then(r => r.ok ? r.json() : { data: [] }),
+        fetch("http://localhost:5001/api/v1/lookalikes?limit=50&page=4").then(r => r.ok ? r.json() : { data: [] })
       ])
 
-      const combined: LookalikeAlert[] = []
-      let anySuccess = false
+      const d1 = p1.status === "fulfilled" && Array.isArray(p1.value?.data) ? p1.value.data : []
+      const d2 = p2.status === "fulfilled" && Array.isArray(p2.value?.data) ? p2.value.data : []
+      const d3 = p3.status === "fulfilled" && Array.isArray(p3.value?.data) ? p3.value.data : []
+      const d4 = p4.status === "fulfilled" && Array.isArray(p4.value?.data) ? p4.value.data : []
+      const combined = [...d1, ...d2, ...d3, ...d4]
 
-      if (res1.ok) {
-        anySuccess = true
-        const json = await res1.json()
-        if (Array.isArray(json?.data)) combined.push(...json.data)
-      }
-      if (res2.ok) {
-        anySuccess = true
-        const json = await res2.json()
-        if (Array.isArray(json?.data) && json.data.length > 0) combined.push(...json.data)
-      }
-
-      if (!anySuccess && (!res1.ok || !res2.ok)) {
+      if (combined.length === 0 && (p1.status === "rejected" || p2.status === "rejected")) {
         setHasError(true)
       } else {
         setHasError(false)
