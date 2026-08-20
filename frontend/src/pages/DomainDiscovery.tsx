@@ -83,14 +83,23 @@ export function DomainDiscovery() {
       ])
 
       const combined: LookalikeAlert[] = []
+      let anySuccess = false
 
       if (res1.ok) {
+        anySuccess = true
         const json = await res1.json()
         if (Array.isArray(json?.data)) combined.push(...json.data)
       }
       if (res2.ok) {
+        anySuccess = true
         const json = await res2.json()
         if (Array.isArray(json?.data) && json.data.length > 0) combined.push(...json.data)
+      }
+
+      if (!anySuccess && (!res1.ok || !res2.ok)) {
+        setHasError(true)
+      } else {
+        setHasError(false)
       }
 
       // Deduplicate by id

@@ -53,8 +53,10 @@ async function maybeIngestLookalikeAlert(candidateDomain, engineEvidence, riskSc
     }
 
     const topMatch = matchedBrands[0] || {};
-    const matchedBrand     = topMatch.brand || null;
-    const similarityScore  = typeof topMatch.similarityScore === 'number' ? topMatch.similarityScore : null;
+    const matchedBrand     = topMatch.brand || (containsHomoglyphs ? 'Homoglyph Target' : 'Suspicious Infrastructure');
+    const similarityScore  = typeof topMatch.similarityScore === 'number' 
+      ? topMatch.similarityScore 
+      : (containsHomoglyphs ? 0.95 : 0.85);
 
     logger.warn(
       `[Scan Controller] Lookalike signal detected for "${candidateDomain}" — ` +

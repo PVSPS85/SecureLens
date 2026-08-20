@@ -48,9 +48,9 @@ export const calculateRiskResult = (engineEvidence = {}) => {
     };
   });
 
-  // 3. Set confidence/completeness mock metrics
-  const confidence = 0.95;
-  const completeness = 0.90;
+  // 3. Extract dynamic confidence/completeness metrics from the SecurityEngine
+  const confidence = typeof engineEvidence.confidence === 'number' ? engineEvidence.confidence : 0.95;
+  const completeness = typeof engineEvidence.completeness === 'number' ? engineEvidence.completeness : 0.90;
 
   // 4. Aggregate recommended remediations
   const recommendationSummary = findings.length > 0

@@ -30,7 +30,21 @@ export const getLookalikeAlerts = async (filters = {}, page = 1, limit = 10) => 
 
     const { data, error, count } = await query;
 
-    if (error) throw error;
+    if (error) {
+      // PGRST103 / 416 means offset is beyond available records; return empty list gracefully
+      if (error.code === 'PGRST103' || (error.message && error.message.includes('range not satisfiable'))) {
+        return {
+          data: [],
+          pagination: {
+            total: count || 0,
+            page,
+            limit,
+            totalPages: Math.ceil((count || 0) / limit)
+          }
+        };
+      }
+      throw error;
+    }
 
     return {
       data: data || [],
