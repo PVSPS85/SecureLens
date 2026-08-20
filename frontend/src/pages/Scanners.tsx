@@ -206,6 +206,27 @@ function EmailScannerView() {
   const [content, setContent] = useState("")
   const [extractedDomain, setExtractedDomain] = useState<string | null>(null)
   const [extractedUrls, setExtractedUrls] = useState<string[]>([])
+  const [emailSecurity, setEmailSecurity] = useState<any>(null)
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false)
+
+  const checkEmailDomainSecurity = async (dom: string) => {
+    setIsCheckingEmail(true)
+    try {
+      const res = await fetch("http://localhost:5001/api/v1/scanners/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: `security@${dom}` })
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setEmailSecurity(json.data)
+      }
+    } catch (err) {
+      console.warn("Failed to check email security:", err)
+    } finally {
+      setIsCheckingEmail(false)
+    }
+  }
 
   const handleScan = () => {
     // 1. Extract sender domain from "From: name <user@domain.com>" or "user@domain.com"
@@ -213,7 +234,9 @@ function EmailScannerView() {
       || content.match(/([a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))/)
 
     if (fromMatch && fromMatch[2]) {
-      setExtractedDomain(fromMatch[2])
+      const dom = fromMatch[2].toLowerCase()
+      setExtractedDomain(dom)
+      checkEmailDomainSecurity(dom)
     }
 
     // 2. Extract embedded HTTP/HTTPS URLs
@@ -226,6 +249,7 @@ function EmailScannerView() {
     setContent("")
     setExtractedDomain(null)
     setExtractedUrls([])
+    setEmailSecurity(null)
   }
 
   return (
@@ -235,7 +259,7 @@ function EmailScannerView() {
           <div>
             <h2 className="text-base font-semibold text-foreground">Scan an Email</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Paste raw email text or headers. SecureLens extracts sender domains and links for instant forensic evaluation.
+              Paste raw email text or headers. SecureLens extracts sender domains, runs live DNS SPF/DMARC checks, and isolates links for forensic analysis.
             </p>
           </div>
 
@@ -259,18 +283,53 @@ function EmailScannerView() {
           {(extractedDomain || extractedUrls.length > 0) && (
             <div className="mt-4 pt-4 border-t border-border space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Extracted Targets for Audit
+                Extracted Targets &amp; Email Authentication
               </h3>
 
               {extractedDomain && (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
-                  <div>
-                    <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Sender Domain</span>
-                    <span className="font-mono text-xs font-medium text-foreground">{extractedDomain}</span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Sender Domain</span>
+                      <span className="font-mono text-xs font-medium text-foreground">{extractedDomain}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" disabled={isCheckingEmail} onClick={() => checkEmailDomainSecurity(extractedDomain)}>
+                        {isCheckingEmail ? "Checking DNS…" : "Recheck SPF/DMARC"}
+                      </Button>
+                      <Button size="sm" onClick={() => navigate(`/?target=${encodeURIComponent(extractedDomain)}`)}>
+                        Scan Domain
+                      </Button>
+                    </div>
                   </div>
-                  <Button size="sm" onClick={() => navigate(`/?target=${encodeURIComponent(extractedDomain)}`)}>
-                    Scan Domain
-                  </Button>
+
+                  {emailSecurity && (
+                    <div className="rounded-lg border border-border bg-card p-3.5 space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">Email Security Verdict: {emailSecurity.verdict?.toUpperCase()}</span>
+                        <Badge variant={emailSecurity.verdict === "safe" ? "low" : emailSecurity.verdict === "warning" ? "medium" : "critical"}>
+                          Score: {emailSecurity.reputationScore}/100
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-border/60">
+                        <div className="rounded border border-border/60 p-2 bg-secondary/30">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">SPF Policy</p>
+                          <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.spf?.record || "None"}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{emailSecurity.records?.spf?.description}</p>
+                        </div>
+                        <div className="rounded border border-border/60 p-2 bg-secondary/30">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">DMARC Policy</p>
+                          <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.dmarc?.record || "None"}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{emailSecurity.records?.dmarc?.description}</p>
+                        </div>
+                        <div className="rounded border border-border/60 p-2 bg-secondary/30">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">MX Exchanger</p>
+                          <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.mx?.record || "None"}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{emailSecurity.records?.mx?.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -299,11 +358,45 @@ function EmailScannerView() {
 function PhoneScannerView() {
   const [phone, setPhone] = useState("")
   const [result, setResult] = useState<any>(null)
+  const [isChecking, setIsChecking] = useState(false)
 
-  const handleScan = () => {
+  const handleScan = async () => {
     const clean = phone.trim()
     if (!clean) return
+    setIsChecking(true)
 
+    try {
+      const res = await fetch("http://localhost:5001/api/v1/scanners/phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: clean })
+      })
+
+      if (res.ok) {
+        const json = await res.json()
+        const data = json.data || {}
+        setResult({
+          phone: clean,
+          isValid: data.isStandardE164,
+          riskLevel: data.riskLevel || "LOW",
+          score: data.spamScore || 15,
+          country: data.country || "International",
+          recommendation: data.recommendation,
+          checks: [
+            { label: "E.164 Number Format", status: data.isStandardE164 ? "PASS" : "FAIL" },
+            { label: "Assigned Region / Country", status: data.country || "GLOBAL" },
+            { label: "Number Classification", status: data.lineType || "STANDARD" }
+          ]
+        })
+        return
+      }
+    } catch (err) {
+      console.warn("Phone scanner API error:", err)
+    } finally {
+      setIsChecking(false)
+    }
+
+    // Fallback format validator if offline
     const isValid = /^(\+?\d{1,4}[\s-]?)?\(?\d{1,4}\)?[\s-]?\d{1,4}[\s-]?\d{1,9}$/.test(clean)
     const isInternational = clean.startsWith("+")
     const isSuspiciousFormat = clean.length < 7 || clean.length > 16
@@ -345,8 +438,8 @@ function PhoneScannerView() {
               onChange={e => setPhone(e.target.value)}
               className="flex-1 px-4 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-ring font-mono"
             />
-            <Button disabled={!phone.trim()} onClick={handleScan}>
-              Check
+            <Button disabled={!phone.trim() || isChecking} onClick={handleScan}>
+              {isChecking ? "Checking…" : "Check"}
             </Button>
           </div>
 

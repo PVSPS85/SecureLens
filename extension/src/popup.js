@@ -3,8 +3,7 @@
 // Role 1 (Frontend Developer): Update web app report URL structure
 // =========================================================================
 const FRONTEND_CONFIG = {
-  // TODO: Update to match Role 1's frontend web app report route (e.g., http://localhost:5173/report/)
-  WEB_APP_REPORT_BASE_URL: 'http://localhost:5173/report',
+  WEB_APP_REPORT_BASE_URL: 'http://localhost:5173/investigate',
 };
 
 document.addEventListener("DOMContentLoaded", () => {

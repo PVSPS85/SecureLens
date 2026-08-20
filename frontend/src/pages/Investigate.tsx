@@ -182,7 +182,7 @@ export function Investigate() {
   }, [activeId, navigate])
 
   const handleExport = () => {
-    if (exportState === "ready") { navigate("/report"); return }
+    if (exportState === "ready") { navigate(`/report?scanId=${activeId}`); return }
     if (exportState === "preparing") return
     setExportState("preparing")
     setTimeout(() => setExportState("ready"), 1500)
@@ -476,12 +476,12 @@ export function Investigate() {
                   {[
                     { label: "Target Domain", value: domain, mono: true },
                     { label: "Target Type", value: reportData?.type || "domain", mono: true },
-                    { label: "IP Address", value: analyzers["ip-asn"]?.data?.ip || analyzers.dns?.data?.records?.a?.[0] || "185.199.108.153", mono: true },
-                    { label: "IP Version", value: analyzers["ip-asn"]?.data?.version ? `IPv${analyzers["ip-asn"].data.version.replace('v', '')}` : "IPv4" },
-                    { label: "TLS Issuer", value: analyzers.tls?.data?.issuer || "Let's Encrypt / Standard CA" },
-                    { label: "Server Header", value: analyzers.http?.data?.server || "Protected Server", mono: true },
-                    { label: "HTTP Status", value: analyzers.http?.data?.statusCode ? `${analyzers.http.data.statusCode} OK` : "200 OK" },
-                    { label: "Punycode IDN", value: analyzers.domain?.data?.isPunycode ? "Detected" : "Standard ASCII" },
+                    { label: "IP Address", value: analyzers["ip-asn"]?.data?.ip || analyzers.dns?.data?.records?.a?.[0] || "Unassigned / No DNS A Record", mono: true },
+                    { label: "IP Version", value: analyzers["ip-asn"]?.data?.version ? `IPv${analyzers["ip-asn"].data.version.replace('v', '')}` : (analyzers.dns?.data?.records?.a?.length ? "IPv4" : "N/A") },
+                    { label: "TLS Issuer", value: analyzers.tls?.data?.issuer || (analyzers.tls?.success ? "Self-Signed / Untrusted" : "No TLS Certificate Presented") },
+                    { label: "Server Header", value: analyzers.http?.data?.server || "Undisclosed / Hidden", mono: true },
+                    { label: "HTTP Status", value: analyzers.http?.data?.statusCode ? `${analyzers.http.data.statusCode} Status` : "No HTTP Response" },
+                    { label: "Punycode IDN", value: analyzers.domain?.data?.isPunycode ? "Detected (Punycode / Homoglyph)" : "Standard ASCII" },
                     { label: "Scan Timestamp", value: reportData?.completedAt ? new Date(reportData.completedAt).toLocaleString() : "Just now" },
                   ].map((item) => (
                     <div key={item.label} className="flex flex-col gap-0.5 border-b border-border/60 pb-3 last:border-0">

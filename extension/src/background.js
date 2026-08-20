@@ -1,18 +1,15 @@
 // =========================================================================
 // 🛠️ BACKEND INTEGRATION CONFIGURATION
-// Role 2 (Backend Developer): Update these endpoints to connect live APIs
+// Connects live to SecureLens API Server
 // =========================================================================
 const CONFIG = {
-  // TODO: Replace with live backend quick-scan endpoint URL (e.g., http://localhost:3000/api/scan/quick)
-  QUICK_SCAN_API_URL: 'http://localhost:3000/api/scan/quick',
-  // TODO: Replace with live backend full-scan endpoint URL or fallback timeout
-  FETCH_TIMEOUT_MS: 5000,
+  QUICK_SCAN_API_URL: 'http://localhost:5001/api/v1/scan?quick=true',
+  FETCH_TIMEOUT_MS: 6000,
 };
 
 // Listener for messages from popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  // BACKEND HOOK: Listen for quick scan requests containing the target URL.
-  // Input payload: { action: "scanUrl", url: tabUrl }
+  // Listen for quick scan requests containing the target URL.
   if (request.action === "scanUrl") {
     const url = request.url;
     
@@ -20,8 +17,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .then(result => {
         // Save scan result to chrome.storage.local for offline cache
         chrome.storage.local.set({ [url]: result }, () => {
-          // BACKEND RESPONSE HOOK: Returns expected payload to popup.js
-          // Output JSON structure: { success: true, data: { score, severity, signals, scanId } }
           sendResponse({ success: true, data: result });
         });
       })
@@ -33,20 +28,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Perform the scan by making a POST request, or fallback to simulated data
+// Perform the scan by making a POST request to live SecureLens API
 async function performScan(url) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT_MS);
   
   try {
-    // BACKEND HOOK: POST request to target backend quick scan API
-    // Request Payload: JSON body with { url: scannedUrl }
     const response = await fetch(CONFIG.QUICK_SCAN_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ url: url }),
+      body: JSON.stringify({ target: url, quick: true }),
       signal: controller.signal
     });
 
@@ -54,22 +47,27 @@ async function performScan(url) {
 
     if (response.ok) {
       const data = await response.json();
-      // BACKEND RESPONSE HOOK: Expose standard fields from live API response
-      // Maps API response fields to extension requirements
+      const score = data.risk?.score !== undefined ? data.risk.score : (data.score !== undefined ? data.score : 0);
+      const severity = data.risk?.level || data.severity || (score > 70 ? "CRITICAL" : score >= 30 ? "MEDIUM" : "LOW");
+      const findings = data.risk?.findings || [];
+      const signals = findings.length > 0 
+        ? findings.map(f => f.vulnerability || f.description) 
+        : (data.signals || ["Domain evaluated under Paranoia Rulebook."]);
+
       return {
-        score: data.score !== undefined ? data.score : 0,
-        severity: data.severity || "SAFE",
-        signals: data.signals || [],
+        score,
+        severity,
+        signals,
         scanId: data.scanId || "",
-        description: data.description || ""
+        description: data.summary?.recommendation || `Target evaluated with score ${score}/100.`
       };
     } else {
-      console.warn(`Backend responded with status ${response.status}. Using local mock fallback.`);
+      console.warn(`Backend responded with status ${response.status}. Using local fallback.`);
       return generateFallbackResult(url);
     }
   } catch (error) {
     clearTimeout(timeoutId);
-    console.warn("Backend connection failed. Using local mock fallback. Error:", error);
+    console.warn("Backend connection failed. Using local fallback. Error:", error);
     return generateFallbackResult(url);
   }
 }
