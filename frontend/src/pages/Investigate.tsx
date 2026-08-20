@@ -138,6 +138,26 @@ export function Investigate() {
   const [isLoading, setIsLoading] = useState<boolean>(Boolean(activeId || targetParam))
   const [exportState, setExportState] = useState<"idle" | "preparing" | "ready">("idle")
 
+  function normalizeReportPayload(data: any) {
+    if (!data) return null
+    if (data.results) return data
+    return {
+      scanId: data.scanId || data.id || activeId,
+      target: data.target || targetParam || activeId,
+      type: data.type || data.target_type || "domain",
+      status: data.status || "completed",
+      completedAt: data.updated_at || data.completedAt || new Date().toISOString(),
+      results: {
+        summary: data.summary || `Vulnerability audit completed for target ${data.target || activeId}`,
+        score: typeof data.riskScore === "number" ? data.riskScore : (typeof data.score === "number" ? data.score : (data.risk_score ?? 0)),
+        riskLevel: (data.riskLevel || data.risk_level || "LOW").toUpperCase(),
+        findings: data.findings || [],
+        recommendations: data.recommendations || [],
+        evidence: data.evidence || {}
+      }
+    }
+  }
+
   useEffect(() => {
     if (!activeId && !targetParam) {
       navigate("/", { replace: true })
@@ -152,39 +172,13 @@ export function Investigate() {
       setIsLoading(true)
       try {
         let loadedScanId = activeId
-
-        // If we only have a target domain/url, or if activeId looks like a domain or mock id, run/retrieve live scan
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeId || "")
 
+        // If activeId is a domain/URL or not a UUID, run or retrieve live scan directly
         if (!isUuid || (!activeId && targetParam)) {
           const scanTarget = targetParam || activeId
           if (scanTarget) {
-            const startRes = await fetch("http://localhost:5001/api/v1/scan", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ target: scanTarget })
-            })
-            if (startRes.ok) {
-              const startJson = await startRes.json()
-              loadedScanId = startJson.scanId || startJson.data?.scanId || loadedScanId
-              if (loadedScanId && isMounted) {
-                navigate(`/investigate/${loadedScanId}`, { replace: true })
-              }
-            }
-          }
-        }
-
-        if (loadedScanId) {
-          const res = await fetch(`http://localhost:5001/api/v1/scan/${loadedScanId}/report`)
-          if (res.ok) {
-            const json = await res.json()
-            if (isMounted && json?.data) {
-              setReportData(json.data)
-            }
-          } else {
-            // If fetch failed, trigger a new scan for target
-            const scanTarget = targetParam || activeId
-            if (scanTarget) {
+            try {
               const startRes = await fetch("http://localhost:5001/api/v1/scan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -192,16 +186,47 @@ export function Investigate() {
               })
               if (startRes.ok) {
                 const startJson = await startRes.json()
-                const newId = startJson.scanId || startJson.data?.scanId
-                if (newId) {
-                  const retryRes = await fetch(`http://localhost:5001/api/v1/scan/${newId}/report`)
-                  if (retryRes.ok) {
-                    const retryJson = await retryRes.json()
-                    if (isMounted && retryJson?.data) {
-                      setReportData(retryJson.data)
-                      loadedScanId = newId
-                      navigate(`/investigate/${newId}`, { replace: true })
-                    }
+                if (startJson.data && isMounted) {
+                  const normalized = normalizeReportPayload(startJson.data)
+                  setReportData(normalized)
+                  const newScanId = startJson.data?.scanId || startJson.data?.scan?.id || startJson.scanId
+                  if (newScanId && newScanId !== activeId) {
+                    navigate(`/investigate/${newScanId}`, { replace: true })
+                  }
+                  setIsLoading(false)
+                  return
+                }
+              }
+            } catch (err) {
+              console.warn("[Investigate] Direct target scan failed:", err)
+            }
+          }
+        }
+
+        // Otherwise fetch by UUID scan report
+        if (loadedScanId) {
+          const res = await fetch(`http://localhost:5001/api/v1/scan/${loadedScanId}/report`)
+          if (res.ok) {
+            const json = await res.json()
+            if (isMounted && json?.data) {
+              setReportData(normalizeReportPayload(json.data))
+            }
+          } else {
+            // Fallback: If not found by ID, try scanning the ID string as a target
+            const scanTarget = targetParam || activeId
+            if (scanTarget) {
+              const retryRes = await fetch("http://localhost:5001/api/v1/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target: scanTarget })
+              })
+              if (retryRes.ok) {
+                const retryJson = await retryRes.json()
+                if (isMounted && retryJson?.data) {
+                  setReportData(normalizeReportPayload(retryJson.data))
+                  const newId = retryJson.data?.scanId || retryJson.data?.scan?.id
+                  if (newId && newId !== activeId) {
+                    navigate(`/investigate/${newId}`, { replace: true })
                   }
                 }
               }

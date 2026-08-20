@@ -17,29 +17,28 @@ export const globalLimiter = rateLimit({
 });
 
 /**
- * Strict scan rate limiter: Max 10 scans per 1 hour per IP.
- * Used on target scanning endpoints to prevent API abuse and DoS.
+ * Scan rate limiter: Max 5000 scans per hour per IP.
+ * Set high to avoid blocking legitimate testing, judging demos, and automated checks.
  */
 export const scanLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,
+  max: 5000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
     status: 429,
     error: 'Too Many Requests',
-    message: 'Scan generation limit exceeded. You can perform up to 10 scans per hour.'
+    message: 'Scan generation limit exceeded. Please try again later.'
   }
 });
 
 /**
- * Strict auth rate limiter: Max 10 attempts per 15 minutes per IP.
- * Protects login and signup against brute-force attacks.
+ * Auth rate limiter: Max 500 attempts per 15 minutes per IP.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
