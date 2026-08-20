@@ -24,7 +24,7 @@ export const validateAndClassifyTarget = (target) => {
     return { isValid: false, error: 'Target identifier must be a text string.' };
   }
 
-  const trimmed = target.trim();
+  let trimmed = target.trim().replace(/\/+$/, '');
   if (trimmed.length === 0) {
     return { isValid: false, error: 'Target identifier cannot be empty.' };
   }

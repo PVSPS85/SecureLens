@@ -239,9 +239,15 @@ export function Dashboard() {
 
     if (analysisStep >= ANALYSIS_STEPS.length - 1) {
       if (isScanDone.current) {
-        const dest = activeScanId.current ? `/investigate/${activeScanId.current}` : "/"
-        const t = setTimeout(() => navigate(dest), 500)
-        return () => clearTimeout(t)
+        if (activeScanId.current) {
+          const t = setTimeout(() => navigate(`/investigate/${activeScanId.current}`), 500)
+          return () => clearTimeout(t)
+        } else {
+          // If the scan failed (e.g. 400 Bad Request), reset the UI so it doesn't get stuck forever
+          setIsAnalyzing(false)
+          setAnalysisStep(-1)
+          return
+        }
       } else {
         return
       }
