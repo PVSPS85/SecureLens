@@ -186,10 +186,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // FRONTEND HOOK: Redirect handler using WEB_APP_REPORT_BASE_URL config
   if (viewScanBtn) {
     viewScanBtn.addEventListener("click", () => {
-      // Role 1 Integration: Combines base report path with query/parameter keys
-      const finalReportUrl = currentScanId 
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentScanId || "");
+      const finalReportUrl = (currentScanId && isUuid)
         ? `${FRONTEND_CONFIG.WEB_APP_REPORT_BASE_URL}/${currentScanId}`
-        : `${FRONTEND_CONFIG.WEB_APP_REPORT_BASE_URL}?domain=${encodeURIComponent(currentDomain)}`;
+        : `${FRONTEND_CONFIG.WEB_APP_REPORT_BASE_URL}?target=${encodeURIComponent(currentDomain)}`;
 
       if (typeof chrome !== "undefined" && chrome.tabs) {
         chrome.tabs.create({ url: finalReportUrl });

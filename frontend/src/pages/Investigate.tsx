@@ -136,8 +136,10 @@ export function Investigate() {
   const [isLoading, setIsLoading] = useState<boolean>(Boolean(activeId))
   const [exportState, setExportState] = useState<"idle" | "preparing" | "ready">("idle")
 
+  const targetParam = searchParams.get("target") || searchParams.get("domain") || searchParams.get("url")
+
   useEffect(() => {
-    if (!activeId) {
+    if (!activeId && !targetParam) {
       navigate("/", { replace: true })
       return
     }
@@ -147,26 +149,70 @@ export function Investigate() {
     async function loadReport() {
       setIsLoading(true)
       try {
-        const res = await fetch(`http://localhost:5001/api/v1/scan/${activeId}/report`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to load report`)
-        const json = await res.json()
-        if (isMounted && json?.data) {
-          setReportData(json.data)
-        }
+        let loadedScanId = activeId
 
-        try {
-          const aiRes = await fetch(`http://localhost:5001/api/v1/secure-ai/summary/${activeId}`)
-          if (aiRes.ok) {
-            const aiJson = await aiRes.json()
-            // The endpoint returns { success, cached, summary } at the top level (no .data wrapper)
-            console.log('[Investigate] SecureAI summary response:', { success: aiJson?.success, cached: aiJson?.cached, hasSummary: Boolean(aiJson?.summary) })
-            if (isMounted && aiJson?.summary) {
-              setAiData({ summary: aiJson.summary })
+        // If we only have a target domain/url, or if activeId looks like a domain or mock id, run/retrieve live scan
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeId || "")
+
+        if (!isUuid || (!activeId && targetParam)) {
+          const scanTarget = targetParam || activeId
+          if (scanTarget) {
+            const startRes = await fetch("http://localhost:5001/api/v1/scan", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ target: scanTarget })
+            })
+            if (startRes.ok) {
+              const startJson = await startRes.json()
+              loadedScanId = startJson.scanId || startJson.data?.scanId || loadedScanId
             }
           }
-        } catch (e) {
-          // AI endpoint is optional
-          console.warn('[Investigate] SecureAI summary fetch failed:', e)
+        }
+
+        if (loadedScanId) {
+          const res = await fetch(`http://localhost:5001/api/v1/scan/${loadedScanId}/report`)
+          if (res.ok) {
+            const json = await res.json()
+            if (isMounted && json?.data) {
+              setReportData(json.data)
+            }
+          } else {
+            // If fetch failed, trigger a new scan for target
+            const scanTarget = targetParam || activeId
+            if (scanTarget) {
+              const startRes = await fetch("http://localhost:5001/api/v1/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target: scanTarget })
+              })
+              if (startRes.ok) {
+                const startJson = await startRes.json()
+                const newId = startJson.scanId || startJson.data?.scanId
+                if (newId) {
+                  const retryRes = await fetch(`http://localhost:5001/api/v1/scan/${newId}/report`)
+                  if (retryRes.ok) {
+                    const retryJson = await retryRes.json()
+                    if (isMounted && retryJson?.data) {
+                      setReportData(retryJson.data)
+                      loadedScanId = newId
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          try {
+            const aiRes = await fetch(`http://localhost:5001/api/v1/secure-ai/summary/${loadedScanId}`)
+            if (aiRes.ok) {
+              const aiJson = await aiRes.json()
+              if (isMounted && aiJson?.summary) {
+                setAiData({ summary: aiJson.summary })
+              }
+            }
+          } catch (e) {
+            console.warn('[Investigate] SecureAI summary fetch failed:', e)
+          }
         }
       } catch (err) {
         console.warn("Dynamic report fetch failed:", err)
@@ -179,7 +225,7 @@ export function Investigate() {
     return () => {
       isMounted = false
     }
-  }, [activeId, navigate])
+  }, [activeId, targetParam, navigate])
 
   const handleExport = () => {
     if (exportState === "ready") { navigate(`/report?scanId=${activeId}`); return }
