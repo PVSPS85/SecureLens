@@ -18,6 +18,7 @@ import {
   Lock,
   Eye,
   Globe,
+  Sparkles,
 } from "lucide-react"
 import { StickyNav } from "../components/investigation/StickyNav"
 import { Timeline } from "../components/investigation/Timeline"

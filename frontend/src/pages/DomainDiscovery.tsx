@@ -171,7 +171,7 @@ export function DomainDiscovery() {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadAlerts}
+            onClick={() => { loadAlerts() }}
             disabled={isLoading}
             className="gap-1.5"
           >
@@ -237,7 +237,7 @@ export function DomainDiscovery() {
             Could not reach the backend. Make sure the API server is running at{" "}
             <code className="font-mono text-xs">localhost:5001</code>.
           </span>
-          <Button variant="outline" size="sm" onClick={loadAlerts} className="ml-auto shrink-0">
+          <Button variant="outline" size="sm" onClick={() => { loadAlerts() }} className="ml-auto shrink-0">
             Retry
           </Button>
         </div>

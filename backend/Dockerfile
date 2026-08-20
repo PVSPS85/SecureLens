@@ -1,38 +1,24 @@
-# Stage 1: Build dependencies
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy files required to install dependencies
-COPY package*.json ./
+# Copy dependency manifests
+COPY securityEngine/package*.json ./securityEngine/
+COPY backend/package*.json ./backend/
 
-# Install only production dependencies
-RUN npm ci --only=production
+# Install dependencies
+RUN cd securityEngine && npm install
+RUN cd backend && npm install
 
-# Stage 2: Productive runtime image
-FROM node:20-alpine AS runner
+# Copy source trees
+COPY securityEngine ./securityEngine
+COPY backend ./backend
 
-WORKDIR /app
+WORKDIR /app/backend
 
-# Set production environment flag
+ENV PORT=5001
 ENV NODE_ENV=production
 
-# Apply system updates
-RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
-
-# Copy dependency packages and project source
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json ./
-COPY src ./src
-
-# Ensure app files are owned by the node user
-RUN chown -R node:node /app
-
-# Run as non-root user
-USER node
-
-# Expose port (Matches standard environment default or PORT configurations)
 EXPOSE 5001
 
-# Server execution entrypoint
 CMD ["node", "src/index.js"]
