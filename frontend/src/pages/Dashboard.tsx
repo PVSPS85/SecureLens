@@ -78,6 +78,7 @@ export function Dashboard() {
 
   const activeScanId = useRef<string | null>(null)
   const isScanDone = useRef(false)
+  const [completedScanId, setCompletedScanId] = useState<string | null>(null)
 
   // ── Live backend data state
   const [metrics, setMetrics] = useState<{
@@ -173,6 +174,7 @@ export function Dashboard() {
     if (!isAnalyzing || !analysisTarget) return
     isScanDone.current = false
     activeScanId.current = null
+    setCompletedScanId(null)
 
     let isMounted = true
 
@@ -183,15 +185,17 @@ export function Dashboard() {
         if (data?.data?.status === "completed") {
           activeScanId.current = id
           isScanDone.current = true
+          if (isMounted) setCompletedScanId(id)
         } else {
           setTimeout(() => {
             if (isMounted && !isScanDone.current) pollStatus(id)
-          }, 2000)
+          }, 1500)
         }
       } catch (err) {
         console.error("Status polling failed:", err)
         activeScanId.current = id
         isScanDone.current = true
+        if (isMounted) setCompletedScanId(id)
       }
     }
 
@@ -209,15 +213,18 @@ export function Dashboard() {
           activeScanId.current = returnedId
           if (result?.data?.status === "completed") {
             isScanDone.current = true
+            if (isMounted) setCompletedScanId(returnedId)
           } else {
             pollStatus(returnedId)
           }
         } else {
           isScanDone.current = true
+          if (isMounted) setCompletedScanId("fallback")
         }
       } catch (err) {
         console.error("Scan submission error:", err)
         isScanDone.current = true
+        if (isMounted) setCompletedScanId("fallback")
       }
     }
 
@@ -238,28 +245,27 @@ export function Dashboard() {
     }
 
     if (analysisStep >= ANALYSIS_STEPS.length - 1) {
-      if (isScanDone.current) {
-        if (activeScanId.current) {
-          const t = setTimeout(() => navigate(`/investigate/${activeScanId.current}`), 500)
-          return () => clearTimeout(t)
-        } else {
-          // If the scan failed (e.g. 400 Bad Request), reset the UI so it doesn't get stuck forever
-          setIsAnalyzing(false)
-          setAnalysisStep(-1)
-          return
-        }
-      } else {
-        return
+      const targetScanId = completedScanId || activeScanId.current
+      if (targetScanId) {
+        const destination = targetScanId !== "fallback" 
+          ? `/investigate/${targetScanId}`
+          : `/investigate/${encodeURIComponent(analysisTarget)}`
+        const t = setTimeout(() => navigate(destination), 300)
+        return () => clearTimeout(t)
+      } else if (isScanDone.current) {
+        const t = setTimeout(() => navigate(`/investigate/${encodeURIComponent(analysisTarget)}`), 300)
+        return () => clearTimeout(t)
       }
+      return
     }
 
-    const stepDelay = isScanDone.current ? 80 : 350
+    const stepDelay = completedScanId || isScanDone.current ? 70 : 300
     const t = setTimeout(() => {
       setAnalysisStep(s => s + 1)
     }, stepDelay)
 
     return () => clearTimeout(t)
-  }, [isAnalyzing, analysisStep, navigate])
+  }, [isAnalyzing, analysisStep, completedScanId, analysisTarget, navigate])
 
   const trimmed = query.trim()
   const inputType: InputType | null = trimmed ? detectType(trimmed) : null
