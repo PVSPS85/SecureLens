@@ -1,7 +1,7 @@
 import app from './app.js';
 import config from './config/index.js';
 import logger from './utils/logger.js';
-import { startNrdDaemon, stopNrdDaemon } from './services/nrdDaemon.js';
+import { startShreshtaDaemon, stopShreshtaDaemon } from './services/shreshtaIngestion.service.js';
 
 let server;
 
@@ -14,8 +14,8 @@ try {
     logger.info(` Environment: ${config.env}                      `);
     logger.info(`=================================================`);
     
-    // Initialize Newly Registered Domain monitoring daemon
-    startNrdDaemon();
+    // Initialize Real-World Shreshta Labs Newly Registered Domain monitoring daemon
+    startShreshtaDaemon();
   });
 } catch (error) {
   logger.error('Failed to start server:', error);
@@ -25,7 +25,7 @@ try {
 // Graceful Shutdown Handler
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
-  stopNrdDaemon();
+  stopShreshtaDaemon();
   if (server) {
     server.close(() => {
       logger.info('HTTP server closed.');

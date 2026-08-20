@@ -59,7 +59,7 @@ export const insertLookalikeAlert = async (alertData) => {
 
     const { data, error } = await supabase
       .from('lookalike_alerts')
-      .insert({
+      .upsert({
         candidate_domain: alertData.candidateDomain,
         matched_brand: alertData.matchedBrand,
         similarity_score: alertData.similarityScore,
@@ -67,7 +67,7 @@ export const insertLookalikeAlert = async (alertData) => {
         detection_type: alertData.detectionType,
         status: alertData.status || 'active',
         evidence_summary: alertData.evidenceSummary || {}
-      })
+      }, { onConflict: 'candidate_domain' })
       .select()
       .single();
 
