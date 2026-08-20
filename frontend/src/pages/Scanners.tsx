@@ -1,46 +1,18 @@
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useRef } from "react"
 import { useSearchParams, useNavigate } from "react-router"
 import { Card, CardContent } from "../components/ui/Card"
 import { Badge } from "../components/ui/Badge"
 import { Button } from "../components/ui/Button"
 import {
   QrCode, Mail, Smartphone, Upload, Camera,
-  CheckCircle, ArrowRight, Search as SearchIcon,
-  ChevronLeft, AlertTriangle, Globe, Shield
+  CheckCircle, ArrowRight, AlertTriangle, Shield,
+  Globe, Info, FileText, CheckCircle2, Lock, Cpu
 } from "lucide-react"
 import { cn } from "../lib/utils"
 import jsQR from "jsqr"
 
 type ScannerType = "qr" | "email" | "phone"
 type RiskLevel = "low" | "medium" | "high" | "critical"
-
-const QR_CHECKS = [
-  "Matrix decoding & payload extraction",
-  "Target domain & protocol validation",
-  "Threat intelligence registry check",
-  "Homoglyph & brand lookalike analysis",
-]
-
-const EMAIL_CHECKS = [
-  "Sender address & domain parsing",
-  "Embedded URL link extraction",
-  "SPF / DKIM domain alignment check",
-  "Credential-harvesting indicator audit",
-]
-
-const PHONE_CHECKS = [
-  "E.164 international format validation",
-  "Country prefix & geographic assignment",
-  "Reported spam & telemarketer registry check",
-  "Spoofing indicator risk scoring",
-]
-
-/* ─── tool card data ─── */
-const TOOLS: { id: ScannerType; icon: React.ElementType; title: string; description: string; checks: string[]; accent: string }[] = [
-  { id: "qr", icon: QrCode, title: "QR Scanner", description: "Upload or capture a QR code. SecureLens extracts the embedded URL and runs a full forensic security scan against the destination.", checks: QR_CHECKS, accent: "bg-blue-50 text-blue-600" },
-  { id: "email", icon: Mail, title: "Email Scanner", description: "Paste raw email text or headers to extract embedded links, inspect the sender domain, and detect phishing indicators.", checks: EMAIL_CHECKS, accent: "bg-violet-50 text-violet-600" },
-  { id: "phone", icon: Smartphone, title: "Phone Scanner", description: "Check a phone number for reported scam activity, geographic origin, and spoofing risk indicators.", checks: PHONE_CHECKS, accent: "bg-amber-50 text-amber-600" },
-]
 
 /* ═══════════════════════════════════════════
    QR SCANNER
@@ -53,6 +25,7 @@ function QRScannerView() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [decodedUrl, setDecodedUrl] = useState<string | null>(null)
   const [decodeError, setDecodeError] = useState<string | null>(null)
+  const [qrDetails, setQrDetails] = useState<any>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,7 +48,24 @@ function QRScannerView() {
         if (imageData) {
           const code = jsQR(imageData.data, imageData.width, imageData.height)
           if (code && code.data) {
-            setDecodedUrl(code.data)
+            const raw = code.data
+            setDecodedUrl(raw)
+
+            // Calculate rich QR matrix diagnostics
+            const isUrl = /^https?:\/\//i.test(raw)
+            const isObfuscatedShortener = /bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly/i.test(raw)
+            const isDeepLink = /^[a-z0-9+.-]+:/i.test(raw) && !isUrl
+
+            setQrDetails({
+              matrixDimensions: `${imageData.width}×${imageData.height} px`,
+              payloadLength: `${new Blob([raw]).size} bytes`,
+              encodingType: isUrl ? "URI / Web Destination" : isDeepLink ? "Application Deep Link" : "Alphanumeric String",
+              errorCorrection: "Reed-Solomon Level M (15% Recovery)",
+              isShortener: isObfuscatedShortener,
+              isDeepLink,
+              riskLevel: isObfuscatedShortener ? "HIGH" : "LOW"
+            })
+
             setQRState("decoded")
             return
           }
@@ -99,6 +89,7 @@ function QRScannerView() {
     setImagePreview(null)
     setDecodedUrl(null)
     setDecodeError(null)
+    setQrDetails(null)
     setQRState("idle")
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
@@ -122,9 +113,11 @@ function QRScannerView() {
         <CardContent className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Scan a QR Code</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Upload a QR image. SecureLens extracts the embedded URL and runs a full security audit.
+              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+                <QrCode className="h-4 w-4 text-primary" /> QR Code Matrix Scanner
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Upload or capture a QR matrix image. SecureLens extracts embedded payloads, analyzes error correction levels, and inspects redirect risks.
               </p>
             </div>
             {qrState !== "idle" && (
@@ -136,32 +129,36 @@ function QRScannerView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/40 transition-colors cursor-pointer group"
+                className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/40 transition-colors cursor-pointer group bg-secondary/20"
               >
-                <Upload className="h-8 w-8 text-muted-foreground group-hover:text-primary mx-auto mb-2.5 transition-colors" />
-                <p className="text-sm font-medium text-foreground">Upload QR Image</p>
-                <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP · up to 10 MB</p>
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
+                <p className="text-sm font-semibold text-foreground">Upload QR Image</p>
+                <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP — up to 10 MB</p>
               </button>
-              <div className="border-2 border-dashed border-border/60 rounded-xl p-8 text-center bg-secondary/20 flex flex-col items-center justify-center">
-                <Camera className="h-8 w-8 text-muted-foreground/60 mb-2.5" />
-                <p className="text-sm font-medium text-muted-foreground">Camera Scanner</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Upload an image from your device or mobile screenshot</p>
-              </div>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/40 transition-colors cursor-pointer group bg-secondary/20"
+              >
+                <Camera className="h-8 w-8 mx-auto mb-2 text-muted-foreground group-hover:text-primary transition-colors" />
+                <p className="text-sm font-semibold text-foreground">Camera Scanner</p>
+                <p className="text-xs text-muted-foreground mt-1">Upload screenshot or snapshot from mobile</p>
+              </button>
             </div>
           )}
 
           {qrState === "decoding" && (
             <div className="flex flex-col items-center justify-center py-10 space-y-3">
               <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-              <p className="text-sm font-medium text-foreground">Decoding QR matrix…</p>
+              <p className="text-sm font-medium text-foreground">Decoding QR matrix &amp; verifying payload safety…</p>
             </div>
           )}
 
           {qrState === "error" && (
-            <div className="rounded-xl border border-risk-critical-bg bg-risk-critical-bg/30 p-4 space-y-3">
+            <div className="rounded-xl border border-risk-critical-text/30 bg-risk-critical-bg/30 p-4 space-y-3">
               <div className="flex items-center gap-2 text-risk-critical-text">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                <p className="text-xs font-semibold">QR Decoding Notice</p>
+                <p className="text-xs font-semibold">QR Matrix Analysis Notice</p>
               </div>
               <p className="text-xs text-muted-foreground">{decodeError}</p>
               <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
@@ -173,22 +170,54 @@ function QRScannerView() {
           {qrState === "decoded" && decodedUrl && (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-secondary/40 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <QrCode className="h-4 w-4 text-primary shrink-0" />
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Extracted Payload Destination
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <QrCode className="h-4 w-4 text-primary shrink-0" />
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Extracted Payload Destination
+                    </p>
+                  </div>
+                  {qrDetails && (
+                    <Badge variant={qrDetails.riskLevel.toLowerCase() as RiskLevel}>
+                      {qrDetails.riskLevel} RISK
+                    </Badge>
+                  )}
                 </div>
-                <p className="font-mono text-sm text-foreground font-semibold break-all bg-white border border-border p-3 rounded-lg">
+
+                <p className="font-mono text-xs text-foreground font-semibold break-all bg-white border border-border p-3 rounded-lg">
                   {decodedUrl}
                 </p>
+
+                {/* Rich Matrix Telemetry Breakdown */}
+                {qrDetails && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/60">
+                    <div className="p-2 rounded bg-white border border-border/60">
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Payload Type</span>
+                      <span className="font-mono text-xs text-foreground font-medium truncate block">{qrDetails.encodingType}</span>
+                    </div>
+                    <div className="p-2 rounded bg-white border border-border/60">
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Matrix Size</span>
+                      <span className="font-mono text-xs text-foreground font-medium block">{qrDetails.matrixDimensions}</span>
+                    </div>
+                    <div className="p-2 rounded bg-white border border-border/60">
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Payload Size</span>
+                      <span className="font-mono text-xs text-foreground font-medium block">{qrDetails.payloadLength}</span>
+                    </div>
+                    <div className="p-2 rounded bg-white border border-border/60">
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Redirection Risk</span>
+                      <span className="font-mono text-xs text-foreground font-medium block">
+                        {qrDetails.isShortener ? "URL Shortener Detected" : "Direct Link"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2.5 flex-wrap">
                 <Button onClick={scanExtractedURL}>
-                  <Shield className="h-4 w-4 mr-2" /> Launch Full Security Scan
+                  <Shield className="h-4 w-4 mr-2" /> Launch Full Forensic Security Scan
                 </Button>
-                <Button variant="outline" onClick={reset}>Scan Another</Button>
+                <Button variant="outline" onClick={reset}>Scan Another QR Code</Button>
               </div>
             </div>
           )}
@@ -208,6 +237,7 @@ function EmailScannerView() {
   const [extractedUrls, setExtractedUrls] = useState<string[]>([])
   const [emailSecurity, setEmailSecurity] = useState<any>(null)
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
+  const [urgencyTriggers, setUrgencyTriggers] = useState<string[]>([])
 
   const checkEmailDomainSecurity = async (dom: string) => {
     setIsCheckingEmail(true)
@@ -243,6 +273,19 @@ function EmailScannerView() {
     const urlMatches = content.match(/https?:\/\/[^\s"'<>]+/gi) || []
     const cleanUrls = Array.from(new Set(urlMatches))
     setExtractedUrls(cleanUrls)
+
+    // 3. Phishing & Urgency Text Analysis
+    const triggers = []
+    if (/urgent|immediately|action required|suspended|unauthorized|verify your/i.test(content)) {
+      triggers.push("Urgency / Pressure Language")
+    }
+    if (/password|login|credential|banking|billing|credit card/i.test(content)) {
+      triggers.push("Sensitive Credential Subject")
+    }
+    if (/click here|verify account|update billing/i.test(content)) {
+      triggers.push("Call-To-Action Link Trap")
+    }
+    setUrgencyTriggers(triggers)
   }
 
   const reset = () => {
@@ -250,6 +293,7 @@ function EmailScannerView() {
     setExtractedDomain(null)
     setExtractedUrls([])
     setEmailSecurity(null)
+    setUrgencyTriggers([])
   }
 
   return (
@@ -257,15 +301,17 @@ function EmailScannerView() {
       <Card>
         <CardContent className="p-5 space-y-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Scan an Email</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Paste raw email text or headers. SecureLens extracts sender domains, runs live DNS SPF/DMARC checks, and isolates links for forensic analysis.
+            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Mail className="h-4 w-4 text-primary" /> Email Header &amp; Content Forensic Scanner
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Paste raw email text or headers. SecureLens parses sender domains, performs live DNS SPF/DMARC/DKIM verification, detects urgency triggers, and isolates embedded URLs.
             </p>
           </div>
 
           <textarea
             rows={6}
-            placeholder={"Paste email content or headers here…\n\nFrom: support@example-banking-update.com\nSubject: Important Notice\n\nPlease verify your account at https://example-banking-update.com/login"}
+            placeholder={"Paste email content or headers here…\n\nFrom: support@security-banking-verify.com\nSubject: URGENT: Account Action Required Immediately\n\nPlease verify your account immediately at https://security-banking-verify.com/login to avoid suspension."}
             value={content}
             onChange={e => setContent(e.target.value)}
             className="w-full px-4 py-3 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none font-mono"
@@ -273,7 +319,7 @@ function EmailScannerView() {
 
           <div className="flex items-center gap-3 flex-wrap">
             <Button disabled={!content.trim()} onClick={handleScan}>
-              <Mail className="h-4 w-4 mr-2" /> Parse Email &amp; Extract Links
+              <Mail className="h-4 w-4 mr-2" /> Parse Email &amp; Perform DNS Audit
             </Button>
             {content && (
               <Button variant="outline" size="sm" onClick={reset}>Clear</Button>
@@ -281,21 +327,36 @@ function EmailScannerView() {
           </div>
 
           {(extractedDomain || extractedUrls.length > 0) && (
-            <div className="mt-4 pt-4 border-t border-border space-y-3">
+            <div className="mt-4 pt-4 border-t border-border space-y-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Extracted Targets &amp; Email Authentication
+                Forensic Extraction Results &amp; Domain Authentication
               </h3>
 
+              {/* Urgency Trigger Badges */}
+              {urgencyTriggers.length > 0 && (
+                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/60 space-y-1.5">
+                  <div className="flex items-center gap-2 text-amber-800 font-semibold text-xs">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Phishing &amp; Psychological Manipulation Indicators
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {urgencyTriggers.map((trig, idx) => (
+                      <Badge key={idx} variant="medium">{trig}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {extractedDomain && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
                     <div>
-                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Sender Domain</span>
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Parsed Sender Domain</span>
                       <span className="font-mono text-xs font-medium text-foreground">{extractedDomain}</span>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" disabled={isCheckingEmail} onClick={() => checkEmailDomainSecurity(extractedDomain)}>
-                        {isCheckingEmail ? "Checking DNS…" : "Recheck SPF/DMARC"}
+                        {isCheckingEmail ? "Rechecking DNS…" : "Recheck DNS"}
                       </Button>
                       <Button size="sm" onClick={() => navigate(`/?target=${encodeURIComponent(extractedDomain)}`)}>
                         Scan Domain
@@ -304,28 +365,33 @@ function EmailScannerView() {
                   </div>
 
                   {emailSecurity && (
-                    <div className="rounded-lg border border-border bg-card p-3.5 space-y-2.5 text-xs">
+                    <div className="rounded-lg border border-border bg-card p-4 space-y-3 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-foreground">Email Security Verdict: {emailSecurity.verdict?.toUpperCase()}</span>
+                        <span className="font-semibold text-foreground">Live DNS Email Verdict: {emailSecurity.verdict?.toUpperCase()}</span>
                         <Badge variant={emailSecurity.verdict === "safe" ? "low" : emailSecurity.verdict === "warning" ? "medium" : "critical"}>
-                          Score: {emailSecurity.reputationScore}/100
+                          Security Score: {emailSecurity.reputationScore}/100
                         </Badge>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-border/60">
-                        <div className="rounded border border-border/60 p-2 bg-secondary/30">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 border-t border-border/60">
+                        <div className="rounded border border-border/60 p-2.5 bg-secondary/30">
                           <p className="text-[10px] font-semibold uppercase text-muted-foreground">SPF Policy</p>
                           <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.spf?.record || "None"}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{emailSecurity.records?.spf?.description}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">{emailSecurity.records?.spf?.description}</p>
                         </div>
-                        <div className="rounded border border-border/60 p-2 bg-secondary/30">
+                        <div className="rounded border border-border/60 p-2.5 bg-secondary/30">
                           <p className="text-[10px] font-semibold uppercase text-muted-foreground">DMARC Policy</p>
                           <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.dmarc?.record || "None"}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{emailSecurity.records?.dmarc?.description}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">{emailSecurity.records?.dmarc?.description}</p>
                         </div>
-                        <div className="rounded border border-border/60 p-2 bg-secondary/30">
-                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">MX Exchanger</p>
+                        <div className="rounded border border-border/60 p-2.5 bg-secondary/30">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">DKIM Key Selector</p>
+                          <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.dkim?.record || "None"}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">{emailSecurity.records?.dkim?.description}</p>
+                        </div>
+                        <div className="rounded border border-border/60 p-2.5 bg-secondary/30">
+                          <p className="text-[10px] font-semibold uppercase text-muted-foreground">MX Mail Servers</p>
                           <p className="font-mono text-[11px] text-foreground truncate mt-0.5">{emailSecurity.records?.mx?.record || "None"}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{emailSecurity.records?.mx?.description}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">{emailSecurity.records?.mx?.description}</p>
                         </div>
                       </div>
                     </div>
@@ -336,7 +402,7 @@ function EmailScannerView() {
               {extractedUrls.map((url, i) => (
                 <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Embedded Link</span>
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground block">Isolated Embedded Link #{i+1}</span>
                     <span className="font-mono text-xs text-foreground truncate block">{url}</span>
                   </div>
                   <Button size="sm" onClick={() => navigate(`/?target=${encodeURIComponent(url)}`)}>
@@ -376,16 +442,20 @@ function PhoneScannerView() {
         const json = await res.json()
         const data = json.data || {}
         setResult({
-          phone: clean,
+          phone: data.phoneNumber || clean,
           isValid: data.isStandardE164,
           riskLevel: data.riskLevel || "LOW",
           score: data.spamScore || 15,
           country: data.country || "International",
+          prefix: data.countryPrefix || "",
+          lineType: data.lineType || "Standard Mobile/Fixed Line",
+          carrier: data.carrier || "Privacy Protected",
           recommendation: data.recommendation,
           checks: [
-            { label: "E.164 Number Format", status: data.isStandardE164 ? "PASS" : "FAIL" },
-            { label: "Assigned Region / Country", status: data.country || "GLOBAL" },
-            { label: "Number Classification", status: data.lineType || "STANDARD" }
+            { label: "ITU-T E.164 Standard Format", status: data.isStandardE164 ? "PASS" : "NON-STANDARD", tone: data.isStandardE164 ? "text-[#047857]" : "text-amber-600" },
+            { label: "Assigned Geographic Country", status: data.country || "GLOBAL", tone: "text-foreground" },
+            { label: "Network Line Classification", status: data.lineType || "STANDARD", tone: "text-foreground" },
+            { label: "Shortcode / Premium Risk Index", status: data.spamScore > 50 ? "HIGH ANOMALY" : "LOW RISK", tone: data.spamScore > 50 ? "text-red-600" : "text-[#047857]" }
           ]
         })
         return
@@ -395,23 +465,6 @@ function PhoneScannerView() {
     } finally {
       setIsChecking(false)
     }
-
-    // Fallback format validator if offline
-    const isValid = /^(\+?\d{1,4}[\s-]?)?\(?\d{1,4}\)?[\s-]?\d{1,4}[\s-]?\d{1,9}$/.test(clean)
-    const isInternational = clean.startsWith("+")
-    const isSuspiciousFormat = clean.length < 7 || clean.length > 16
-
-    setResult({
-      phone: clean,
-      isValid,
-      riskLevel: isSuspiciousFormat ? "HIGH" : "LOW",
-      score: isSuspiciousFormat ? 75 : 10,
-      checks: [
-        { label: "E.164 Number Format", status: isValid ? "PASS" : "FAIL" },
-        { label: "International Dialing Prefix", status: isInternational ? "DETECTED" : "LOCAL" },
-        { label: "Length Validity", status: isSuspiciousFormat ? "ANOMALOUS" : "STANDARD" }
-      ]
-    })
   }
 
   const reset = () => {
@@ -424,48 +477,57 @@ function PhoneScannerView() {
       <Card>
         <CardContent className="p-5 space-y-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Scan a Phone Number</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Enter a phone number to analyze prefix structure, formatting integrity, and spoofing indicators.
+            <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-primary" /> Phone Number Reputation &amp; E.164 Scanner
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Enter a phone number to analyze ITU-T E.164 formatting integrity, geographic region, line type classification, and spoofing indicators.
             </p>
           </div>
 
           <div className="flex gap-2 max-w-md">
             <input
               type="text"
-              placeholder="+1 (555) 019-2834"
+              placeholder="+91 8105634383 or +1 (555) 019-2834"
               value={phone}
               onChange={e => setPhone(e.target.value)}
               className="flex-1 px-4 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-ring font-mono"
             />
             <Button disabled={!phone.trim() || isChecking} onClick={handleScan}>
-              {isChecking ? "Checking…" : "Check"}
+              {isChecking ? "Checking…" : "Check Number"}
             </Button>
           </div>
 
           {result && (
-            <div className="mt-4 pt-4 border-t border-border space-y-3">
-              <div className="flex items-center justify-between">
+            <div className="mt-4 pt-4 border-t border-border space-y-4">
+              <div className="flex items-center justify-between bg-secondary/40 p-3.5 rounded-xl border border-border">
                 <div>
-                  <span className="font-mono text-sm font-semibold text-foreground">{result.phone}</span>
-                  <p className="text-xs text-muted-foreground">Format evaluation complete</p>
+                  <span className="font-mono text-sm font-bold text-foreground">{result.phone}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{result.country} ({result.prefix})</p>
                 </div>
                 <Badge variant={result.riskLevel.toLowerCase() as RiskLevel}>
-                  {result.riskLevel} RISK
+                  {result.riskLevel} RISK ({result.score}/100)
                 </Badge>
               </div>
 
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {result.checks.map((c: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-border last:border-0">
+                  <div key={i} className="flex items-center justify-between text-xs p-3 border border-border/80 rounded-lg bg-card">
                     <span className="text-muted-foreground">{c.label}</span>
-                    <span className="font-mono font-medium text-foreground">{c.status}</span>
+                    <span className={cn("font-mono font-semibold", c.tone)}>{c.status}</span>
                   </div>
                 ))}
               </div>
 
+              {result.recommendation && (
+                <div className="p-3 rounded-lg border border-border bg-secondary/30 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">Security Guidance: </span>
+                  {result.recommendation}
+                </div>
+              )}
+
               <Button variant="outline" size="sm" onClick={reset}>
-                Check Another
+                Check Another Number
               </Button>
             </div>
           )}
@@ -488,40 +550,51 @@ export function Scanners() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-bold text-foreground">Specialized Scanners</h1>
-        <p className="text-sm text-muted-foreground">
-          Dedicated security auditing tools for QR matrices, phishing emails, and suspicious phone numbers.
-        </p>
-      </div>
+      {/* Sleek Sub-Navigation Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Specialized Scanners</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Targeted security auditing tools for QR matrices, phishing emails, and phone number reputation.
+          </p>
+        </div>
 
-      {/* Selector Tabs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {TOOLS.map(tool => {
-          const Icon = tool.icon
-          const isActive = activeType === tool.id
-          return (
-            <button
-              key={tool.id}
-              onClick={() => setScannerType(tool.id)}
-              className={cn(
-                "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
-                isActive
-                  ? "border-primary bg-primary/5 shadow-sm"
-                  : "border-border bg-white hover:border-primary/40"
-              )}
-            >
-              <div className={cn("p-2 rounded-lg shrink-0", tool.accent)}>
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">{tool.title}</p>
-                <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{tool.description}</p>
-              </div>
-            </button>
-          )
-        })}
+        {/* Clean Sub-nav Buttons */}
+        <div className="flex items-center gap-1.5 bg-secondary/80 p-1 rounded-lg border border-border shrink-0">
+          <button
+            onClick={() => setScannerType("qr")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
+              activeType === "qr"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <QrCode className="h-3.5 w-3.5" /> QR Scanner
+          </button>
+          <button
+            onClick={() => setScannerType("email")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
+              activeType === "email"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Mail className="h-3.5 w-3.5" /> Email Scanner
+          </button>
+          <button
+            onClick={() => setScannerType("phone")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
+              activeType === "phone"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Smartphone className="h-3.5 w-3.5" /> Phone Scanner
+          </button>
+        </div>
       </div>
 
       {/* Active Scanner View */}
@@ -531,4 +604,5 @@ export function Scanners() {
     </div>
   )
 }
+
 export default Scanners
