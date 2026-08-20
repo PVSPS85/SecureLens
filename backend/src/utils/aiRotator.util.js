@@ -23,65 +23,68 @@ export const executeWithRotation = async (systemPrompt, userPrompt) => {
   // Loop 1: Iterate through the Gemini API keys
   for (let i = 0; i < geminiKeys.length; i++) {
     const key = geminiKeys[i];
-    try {
-      logger.info(`[AIRotator] Attempting generation using Gemini API key index ${i}`);
-      const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        systemInstruction: systemPrompt
-      });
-      
-      const response = result.response;
-      const text = response.text();
-      if (text) {
-        return text.trim();
+    const geminiModels = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    for (const modelName of geminiModels) {
+      try {
+        logger.info(`[AIRotator] Attempting generation using Gemini model "${modelName}" with key index ${i}`);
+        const genAI = new GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          systemInstruction: systemPrompt
+        });
+        
+        const response = result.response;
+        const text = response.text();
+        if (text) {
+          return text.trim();
+        }
+      } catch (error) {
+        logger.warn(`[AIRotator] Gemini (${modelName}) key[${i}] failed: ${error.message}`);
       }
-    } catch (error) {
-      console.error(`[AIRotator] Gemini key[${i}] FAILED: ${error.message}`);
-      logger.warn(`[AIRotator] Gemini API key index ${i} failed: ${error.message}`);
     }
   }
 
   // Loop 2: Fallback to Groq API keys if Gemini keys failed or are empty
   if (groqKeys.length > 0) {
-    console.warn("Gemini failed, falling back to Groq...");
-    logger.info('[AIRotator] All Gemini keys exhausted or empty. Falling back to Groq API keys...');
+    logger.info('[AIRotator] Falling back to Groq API keys...');
+    const groqModels = ['groq/compound-mini', 'groq/compound', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+    
     for (let i = 0; i < groqKeys.length; i++) {
       const key = groqKeys[i];
-      try {
-        logger.info(`[AIRotator] Attempting generation using Groq API key index ${i}`);
-        
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt }
-            ]
-          })
-        });
+      for (const modelName of groqModels) {
+        try {
+          logger.info(`[AIRotator] Attempting generation using Groq model "${modelName}" with key index ${i}`);
+          
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+              model: modelName,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+              ]
+            })
+          });
 
-        if (!response.ok) {
-          const errBody = await response.text().catch(() => '');
-          console.error(`[AIRotator] Groq key[${i}] HTTP ${response.status}: ${errBody.slice(0, 200)}`);
-          throw new Error(`Groq API returned status: ${response.status}`);
+          if (response.ok) {
+            const data = await response.json();
+            const text = data?.choices?.[0]?.message?.content;
+            if (text) {
+              return text.trim();
+            }
+          } else {
+            const errBody = await response.text().catch(() => '');
+            logger.warn(`[AIRotator] Groq (${modelName}) key[${i}] HTTP ${response.status}: ${errBody.slice(0, 150)}`);
+          }
+        } catch (error) {
+          logger.warn(`[AIRotator] Groq (${modelName}) key[${i}] error: ${error.message}`);
         }
-
-        const data = await response.json();
-        const text = data?.choices?.[0]?.message?.content;
-        if (text) {
-          return text.trim();
-        }
-      } catch (error) {
-        console.error(`[AIRotator] Groq key[${i}] FAILED: ${error.message}`);
-        logger.warn(`[AIRotator] Groq API key index ${i} failed: ${error.message}`);
       }
     }
   } else {

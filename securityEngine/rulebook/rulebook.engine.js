@@ -230,13 +230,13 @@ class RulebookEngine {
     }
 
     // 4b. Missing critical HTTP security headers
-    //     HTTPAnalyzer stores pre-computed booleans at securityHeaders.hasHSTS / hasCSP
+    //     Informational deduction (+5 per missing header, max +10)
     const missingHeaders = [];
     if (!hasHSTS) missingHeaders.push('HSTS');
     if (!hasCSP)  missingHeaders.push('CSP');
     if (missingHeaders.length > 0) {
-      score += 20;
-      detectedRisks.push(`MEDIUM: Missing critical security header(s): ${missingHeaders.join(', ')}`);
+      score += missingHeaders.length * 5;
+      detectedRisks.push(`INFORMATIONAL: Missing security header(s): ${missingHeaders.join(', ')}`);
     }
 
     // 4c. Domain age < 30 days — standalone age signal (only when compound not fired)
@@ -274,15 +274,15 @@ class RulebookEngine {
 
   /**
    * Maps a numeric score to a named risk band.
-   *   0 – 15  → LOW      (near-perfect, established, well-configured sites only)
-   *  16 – 40  → MEDIUM
-   *  41 – 75  → HIGH
-   *  76 – 100 → CRITICAL
+   *   0 – 25  → LOW      (Safe, established, standard configurations)
+   *  26 – 55  → MEDIUM   (Anomalous configuration / suspicious attributes)
+   *  56 – 75  → HIGH     (Significant phishing indicators)
+   *  76 – 100 → CRITICAL (Definite malicious kit, homoglyph, or brand impersonation)
    */
   static getRiskLevel(score) {
     if (score >= 76) return 'CRITICAL';
-    if (score >= 41) return 'HIGH';
-    if (score >= 16) return 'MEDIUM';
+    if (score >= 56) return 'HIGH';
+    if (score >= 26) return 'MEDIUM';
     return 'LOW';
   }
 }
