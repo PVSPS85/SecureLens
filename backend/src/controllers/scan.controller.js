@@ -186,7 +186,7 @@ export const startScan = async (req, res, next) => {
 
     await insertReport({
       scanId,
-      summary: `Vulnerability audit completed for target ${normalized.normalizedUrl}`,
+      summary: riskResult.aiExecutiveSummary || `Vulnerability audit completed for target ${normalized.normalizedUrl}`,
       findings: riskResult.findings,
       infrastructure: { 
         analyzedAt: engineEvidence.analyzedAt,

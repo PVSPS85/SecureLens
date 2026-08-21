@@ -52,10 +52,34 @@ export const calculateRiskResult = (engineEvidence = {}) => {
   const confidence = typeof engineEvidence.confidence === 'number' ? engineEvidence.confidence : 0.95;
   const completeness = typeof engineEvidence.completeness === 'number' ? engineEvidence.completeness : 0.90;
 
-  // 4. Aggregate recommended remediations
-  const recommendationSummary = findings.length > 0
-    ? 'High-risk threat indicators detected. Please review the detailed findings and consider blocking or taking down the target.'
-    : 'No active threat findings detected. Maintain default system security headers and SSL configurations.';
+  // 4. Aggregate recommended remediations & AI Executive Summary
+  let recommendationSummary = '';
+  let aiExecutiveSummary = '';
+
+  switch (riskLevel) {
+    case 'CRITICAL':
+      recommendationSummary = 'Critical threat indicators detected. Immediate action required. Domain exhibits severe malicious behavior, such as brand impersonation, credential harvesting, or active malware hosting. Blacklist and take down the target immediately.';
+      aiExecutiveSummary = 'CRITICAL THREAT: Automated forensic synthesis confirms active exploitation indicators on this target. Immediate blocking and blacklisting recommended.';
+      break;
+    case 'HIGH':
+      recommendationSummary = 'High-risk threat indicators detected. The target exhibits suspicious infrastructure, untrusted certificates, or significant security hygiene failures. Consider blocking or restricting access until further manual review.';
+      aiExecutiveSummary = 'ELEVATED RISK: Threat telemetry flags significant infrastructure or certificate warnings. Proceed with extreme caution and restrict access.';
+      break;
+    case 'MEDIUM':
+      recommendationSummary = 'Moderate risk detected. The target lacks standard security protocols, uses suspicious tracking, or triggers minor threat warnings. Proceed with caution and monitor telemetry.';
+      aiExecutiveSummary = 'MODERATE RISK: Target exhibits anomalous behavior or poor security posture. Recommend monitoring telemetry before granting broad access.';
+      break;
+    case 'LOW':
+    default:
+      if (findings.length > 0) {
+        recommendationSummary = 'Low risk detected. The target exhibits minor informational findings (e.g. missing security headers), but no active phishing or malicious infrastructure was found. Safe to proceed.';
+        aiExecutiveSummary = 'LOW RISK / INFORMATIONAL: Target exhibits minor hygiene issues (like missing headers), but core infrastructure and trademark telemetry verified clean. Safe to proceed.';
+      } else {
+        recommendationSummary = 'No active threat findings detected. The target maintains strong security posture and verified infrastructure. Safe to proceed.';
+        aiExecutiveSummary = 'VERIFIED CLEAN: Telemetry synthesis confirms strong security posture and verified infrastructure. No trademark collision or active threats detected.';
+      }
+      break;
+  }
 
   const failedChecks = findings.filter(f => f.severity === 'critical' || f.severity === 'high');
 
@@ -70,6 +94,7 @@ export const calculateRiskResult = (engineEvidence = {}) => {
     warnings: [],
     failedChecks,
     recommendation: recommendationSummary,
+    aiExecutiveSummary,
     rulebookVersion: '1.0'
   };
 };
