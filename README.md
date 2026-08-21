@@ -53,7 +53,7 @@ SecureLens operates on a zero-trust, multi-layered cybersecurity pipeline:
                                ▼
             ┌──────────────────────────────────────┐
             │         SecureAI Intelligence        │
-            │  (Gemini 2.0 Flash & Groq Rotation)  │
+            │  (Gemini & Groq Chatbot + Fallback)  │
             └──────────────────┬───────────────────┘
                                │
                                ▼
@@ -61,6 +61,11 @@ SecureLens operates on a zero-trust, multi-layered cybersecurity pipeline:
       ▼                                                 ▼
 [ Forensic Web Dashboard (React 18 + Vite) ]   [ Chrome Extension (Manifest V3) ]
 ```
+
+### ✨ **Newest Updates (SIH 2026)**
+- **Smart Conversational Fallback Engine**: If AI API keys exhaust or hit rate limits, the chatbot seamlessly transitions to a smart regex-based conversational engine that evaluates telemetry context dynamically.
+- **Synchronized Brand Impersonation**: Lookalike detection now accurately links outside feed signals (Suspicious Infrastructure, Homoglyph Spoofs, Protected Brands) directly to investigation reports.
+- **Context-Aware Rulebook AI Integration**: AI summaries are now deterministically tied to the exact Rulebook Engine risk levels (CRITICAL, HIGH, MEDIUM, LOW) rather than simple findings counts.
 
 ---
 
