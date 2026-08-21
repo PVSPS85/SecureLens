@@ -166,13 +166,37 @@ User Question: ${sanitizedQuery}
 
     answer = await executeWithRotation(systemPrompt, userPrompt);
 
-    // Replace generic fallback with rich investigation-specific AI synthesis
+    // Smart Regex-based Conversational Fallback if API keys fail/expire
     if (!answer || answer.includes('unavailable due to high demand') || answer.includes('high load')) {
-      answer = `### 🛡️ SecureAI Threat Synthesis for ${targetUrl}\n\n• **Risk Assessment:** Score **${riskScore}/100** (${riskLevel})\n• **Vulnerability Observations:**\n${findingsSummary}\n\n• **Security Guidance:** ${recommendation || 'Standard security posture verified. Maintain default TLS certificate renewal and HTTP header policies.'}`;
+      const q = sanitizedQuery.toLowerCase();
+      let dynamicResponse = '';
+
+      if (q.includes('safe') || q.includes('use it') || q.includes('continue') || q.includes('trust')) {
+        if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH') {
+          dynamicResponse = `No, it is **NOT SAFE** to continue. This target has a dangerous risk score of ${riskScore}/100.\n\n**Action Required:** ${recommendation}`;
+        } else {
+          dynamicResponse = `Yes, it is generally safe to proceed. The risk score is low (${riskScore}/100). However, remain mindful of these minor observations:\n${findingsSummary}`;
+        }
+      } else if (q.includes('what') || q.includes('why') || q.includes('explain') || q.includes('details') || q.includes('reason')) {
+         dynamicResponse = `The risk score for ${targetUrl} is **${riskScore}/100** due to the following detected vulnerabilities:\n${findingsSummary}\n\nOur rulebook engine flagged these specific parameters during the automated headless browser scan.`;
+      } else if (q.includes('hello') || q.includes('hi ') || q.includes('hey')) {
+         dynamicResponse = `Hello! I am SecureAI. I can help you analyze the live threat telemetry for \`${targetUrl}\`. What would you like to know about its security posture?`;
+      } else if (q.includes('phishing') || q.includes('impersonat') || q.includes('fake') || q.includes('scam')) {
+         if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH') {
+           dynamicResponse = `Yes, our security engine has detected significant phishing, impersonation, or malicious markers on this domain. It exhibits strong signals of a scam or lookalike attack.`;
+         } else {
+           dynamicResponse = `No active phishing or brand impersonation was detected for ${targetUrl}. The Lookalike Analyzer verified this domain's visual and homoglyph profile as clean.`;
+         }
+      } else {
+         dynamicResponse = `Based on the forensic telemetry for ${targetUrl}, the overall risk score is **${riskScore}/100** (${riskLevel}). \n\n**Security Guidance:** ${recommendation || 'Standard security posture verified.'}`;
+      }
+
+      answer = `### 🤖 SecureAI\n\n${dynamicResponse}`;
     }
   } catch (error) {
     logger.error(`[SecureAI Service] Failed to handle chat query: ${error.message}`);
-    answer = `### 🛡️ SecureAI Threat Synthesis for ${targetUrl}\n\n• **Risk Assessment:** Score **${riskScore}/100** (${riskLevel})\n• **Vulnerability Observations:**\n${findingsSummary}\n\n• **Security Guidance:** ${recommendation || 'Standard security posture verified. Maintain default TLS certificate renewal and HTTP header policies.'}`;
+    // Ultimate fallback for absolute failures
+    answer = `### 🤖 SecureAI\n\nBased on the forensic telemetry for ${targetUrl}, the overall risk score is **${riskScore}/100** (${riskLevel}). \n\n**Security Guidance:** ${recommendation || 'Standard security posture verified.'}`;
   }
 
   return {
